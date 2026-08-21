@@ -859,6 +859,18 @@ TEAMTALKDLL_API TTBOOL TT_SetSoundInputPreprocessEx(IN TTInstance* lpTTInstance,
     Convert(*lpAudioPreprocessor, preprocess);
     return static_cast<TTBOOL>(clientnode->SetSoundPreprocess(preprocess));
 }
+
+TEAMTALKDLL_API TTBOOL TT_SetSoundInputEqualizer(IN TTInstance* lpTTInstance,
+                                                 IN INT32 nBassDB,
+                                                 IN INT32 nMidDB,
+                                                 IN INT32 nTrebleDB)
+{
+    clientnode_t clientnode;
+    GET_CLIENTNODE_RET(clientnode, lpTTInstance, FALSE);
+    return static_cast<TTBOOL>(clientnode->SetSoundInputEqualizer(nBassDB,
+                                                                  nMidDB,
+                                                                  nTrebleDB));
+}
     
 TEAMTALKDLL_API TTBOOL TT_GetSoundInputPreprocessEx(IN TTInstance* lpTTInstance,
                                                     OUT AudioPreprocessor* lpAudioPreprocessor)

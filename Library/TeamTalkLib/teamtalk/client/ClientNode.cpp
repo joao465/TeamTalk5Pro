@@ -36,6 +36,7 @@
 #include <cstddef>
 #include <cstring>
 #include <ctime>
+#include <cmath>
 
 #include <ace/OS.h>
 
@@ -67,6 +68,179 @@ constexpr auto LOCAL_MEDIAPLAYBACK_SESSIONID_MAX    = 16; // Max session id. Sho
 #if (SIMULATE_RX_PACKETLOSS || SIMULATE_TX_PACKETLOSS) && defined(NDEBUG)
 #error Packetloss in release mode
 #endif
+
+namespace teamtalk
+{
+struct SoundInputEqualizerState
+{
+    struct Biquad
+    {
+        double b0 = 1.0;
+        double b1 = 0.0;
+        double b2 = 0.0;
+        double a1 = 0.0;
+        double a2 = 0.0;
+        std::vector<double> z1;
+        std::vector<double> z2;
+
+        void Reset(int channels)
+        {
+            z1.assign(size_t(channels), 0.0);
+            z2.assign(size_t(channels), 0.0);
+        }
+
+        void Set(double nb0, double nb1, double nb2,
+                 double na0, double na1, double na2)
+        {
+            b0 = nb0 / na0;
+            b1 = nb1 / na0;
+            b2 = nb2 / na0;
+            a1 = na1 / na0;
+            a2 = na2 / na0;
+        }
+
+        double Process(double input, int channel)
+        {
+            double const output = b0 * input + z1[size_t(channel)];
+            z1[size_t(channel)] = b1 * input - a1 * output + z2[size_t(channel)];
+            z2[size_t(channel)] = b2 * input - a2 * output;
+            return output;
+        }
+    };
+
+    int bassdb = 0;
+    int middb = 0;
+    int trebledb = 0;
+    int samplerate = 0;
+    int channels = 0;
+    bool dirty = true;
+
+    Biquad bass;
+    Biquad mid;
+    Biquad treble;
+
+    static constexpr double PI = 3.14159265358979323846;
+
+    static void ConfigurePeak(Biquad& filter, double fs, double frequency,
+                              double q, double gain_db)
+    {
+        double const A = std::pow(10.0, gain_db / 40.0);
+        double const w0 = 2.0 * PI * frequency / fs;
+        double const alpha = std::sin(w0) / (2.0 * q);
+        double const c = std::cos(w0);
+
+        filter.Set(1.0 + alpha * A,
+                   -2.0 * c,
+                   1.0 - alpha * A,
+                   1.0 + alpha / A,
+                   -2.0 * c,
+                   1.0 - alpha / A);
+    }
+
+    static void ConfigureLowShelf(Biquad& filter, double fs, double frequency,
+                                  double gain_db)
+    {
+        double const A = std::pow(10.0, gain_db / 40.0);
+        double const w0 = 2.0 * PI * frequency / fs;
+        double const c = std::cos(w0);
+        double const s = std::sin(w0);
+        double const alpha = (s / 2.0) * std::sqrt(2.0);
+        double const beta = 2.0 * std::sqrt(A) * alpha;
+
+        filter.Set(A * ((A + 1.0) - (A - 1.0) * c + beta),
+                   2.0 * A * ((A - 1.0) - (A + 1.0) * c),
+                   A * ((A + 1.0) - (A - 1.0) * c - beta),
+                   (A + 1.0) + (A - 1.0) * c + beta,
+                   -2.0 * ((A - 1.0) + (A + 1.0) * c),
+                   (A + 1.0) + (A - 1.0) * c - beta);
+    }
+
+    static void ConfigureHighShelf(Biquad& filter, double fs, double frequency,
+                                   double gain_db)
+    {
+        double const A = std::pow(10.0, gain_db / 40.0);
+        double const w0 = 2.0 * PI * frequency / fs;
+        double const c = std::cos(w0);
+        double const s = std::sin(w0);
+        double const alpha = (s / 2.0) * std::sqrt(2.0);
+        double const beta = 2.0 * std::sqrt(A) * alpha;
+
+        filter.Set(A * ((A + 1.0) + (A - 1.0) * c + beta),
+                   -2.0 * A * ((A - 1.0) + (A + 1.0) * c),
+                   A * ((A + 1.0) + (A - 1.0) * c - beta),
+                   (A + 1.0) - (A - 1.0) * c + beta,
+                   2.0 * ((A - 1.0) - (A + 1.0) * c),
+                   (A + 1.0) - (A - 1.0) * c - beta);
+    }
+
+    void SetBands(int bass_db, int mid_db, int treble_db)
+    {
+        bass_db = std::clamp(bass_db, -12, 12);
+        mid_db = std::clamp(mid_db, -12, 12);
+        treble_db = std::clamp(treble_db, -12, 12);
+
+        if (bassdb != bass_db || middb != mid_db || trebledb != treble_db)
+        {
+            bassdb = bass_db;
+            middb = mid_db;
+            trebledb = treble_db;
+            dirty = true;
+        }
+    }
+
+    void Configure(const media::AudioFormat& format)
+    {
+        samplerate = format.samplerate;
+        channels = format.channels;
+
+        bass.Reset(channels);
+        mid.Reset(channels);
+        treble.Reset(channels);
+
+        double const nyquist = double(samplerate) * 0.5;
+        double const bass_hz = std::min(180.0, nyquist * 0.45);
+        double const mid_hz = std::min(1200.0, nyquist * 0.60);
+        double const treble_hz = std::min(4500.0, nyquist * 0.84);
+
+        ConfigureLowShelf(bass, double(samplerate), bass_hz, double(bassdb));
+        ConfigurePeak(mid, double(samplerate), mid_hz, 0.8, double(middb));
+        ConfigureHighShelf(treble, double(samplerate), treble_hz, double(trebledb));
+        dirty = false;
+    }
+
+    void Process(media::AudioFrame& frame)
+    {
+        if (!frame.input_buffer || frame.input_samples <= 0 ||
+            !frame.inputfmt.IsValid() ||
+            (bassdb == 0 && middb == 0 && trebledb == 0))
+            return;
+
+        if (dirty || samplerate != frame.inputfmt.samplerate ||
+            channels != frame.inputfmt.channels)
+        {
+            Configure(frame.inputfmt);
+        }
+
+        int const total_frames = frame.input_samples;
+        int const channel_count = frame.inputfmt.channels;
+
+        for (int sample = 0; sample < total_frames; ++sample)
+        {
+            for (int channel = 0; channel < channel_count; ++channel)
+            {
+                size_t const index = size_t(sample) * size_t(channel_count) + size_t(channel);
+                double value = double(frame.input_buffer[index]);
+                value = bass.Process(value, channel);
+                value = mid.Process(value, channel);
+                value = treble.Process(value, channel);
+
+                int const pcm = std::clamp(int(std::lround(value)), -32768, 32767);
+                frame.input_buffer[index] = short(pcm);
+            }
+        }
+    }
+};
+}
 
 ClientNode::ClientNode(const ACE_TString& version, ClientListener* listener)
                        : m_flags(CLIENT_CLOSED)
@@ -1029,6 +1203,9 @@ void ClientNode::CloseAudioCapture()
 // Separate thread
 void ClientNode::QueueAudioCapture(media::AudioFrame& audframe)
 {
+    if (m_soundinput_equalizer)
+        m_soundinput_equalizer->Process(audframe);
+
     bool const ptt_close = m_voice_tx_closed.exchange(false);
     audframe.force_enc = (((m_flags & CLIENT_TX_VOICE) != 0u) || ptt_close);
     audframe.voiceact_enc = ((m_flags & CLIENT_SNDINPUT_VOICEACTIVATED) != 0u);
@@ -3137,6 +3314,17 @@ bool ClientNode::SetSoundPreprocess(const AudioPreprocessor& preprocessor)
     m_soundprop.preprocessor = preprocessor;
 
     return m_voice_thread.UpdatePreprocessor(preprocessor);
+}
+
+bool ClientNode::SetSoundInputEqualizer(int bassdb, int middb, int trebledb)
+{
+    rguard_t const g_snd(LockSndprop());
+
+    if (!m_soundinput_equalizer)
+        m_soundinput_equalizer = std::make_unique<SoundInputEqualizerState>();
+
+    m_soundinput_equalizer->SetBands(bassdb, middb, trebledb);
+    return true;
 }
 
 void ClientNode::SetSoundInputTone(StreamTypes streams, int frequency)

@@ -258,6 +258,12 @@
 #define SETTINGS_SOUND_AGC_DEFAULT                  DEFAULT_AGC_ENABLE
 #define SETTINGS_SOUND_DENOISING                    "soundsystem/denoising"
 #define SETTINGS_SOUND_DENOISING_DEFAULT            DEFAULT_DENOISE_ENABLE
+#define SETTINGS_SOUND_MIC_EQ_BASS                  "soundsystem/microphone-eq-bass"
+#define SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT          0
+#define SETTINGS_SOUND_MIC_EQ_MID                   "soundsystem/microphone-eq-mid"
+#define SETTINGS_SOUND_MIC_EQ_MID_DEFAULT           0
+#define SETTINGS_SOUND_MIC_EQ_TREBLE                "soundsystem/microphone-eq-treble"
+#define SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT        0
 #define SETTINGS_SOUND_SOUNDOUT_MUTE_LEFT           "soundsystem/sndoutput-mute-left"
 #define SETTINGS_SOUND_SOUNDOUT_MUTE_LEFT_DEFAULT   false
 #define SETTINGS_SOUND_SOUNDOUT_MUTE_RIGHT          "soundsystem/sndoutput-mute-right"

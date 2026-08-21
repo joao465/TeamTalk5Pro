@@ -284,6 +284,12 @@ void PreferencesDlg::initDevices()
     ui.agcBox->setChecked(ttSettings->value(SETTINGS_SOUND_AGC, SETTINGS_SOUND_AGC_DEFAULT).toBool());
     ui.denoisingBox->setChecked(ttSettings->value(SETTINGS_SOUND_DENOISING,
                                                   SETTINGS_SOUND_DENOISING_DEFAULT).toBool());
+    ui.micEqBassSpinBox->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_BASS,
+                                                    SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT).toInt());
+    ui.micEqMidSpinBox->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_MID,
+                                                   SETTINGS_SOUND_MIC_EQ_MID_DEFAULT).toInt());
+    ui.micEqTrebleSpinBox->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_TREBLE,
+                                                      SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT).toInt());
     slotUpdateSoundCheckBoxes();
 }
 
@@ -947,6 +953,13 @@ void PreferencesDlg::slotSaveChanges()
         ttSettings->setValueOrClear(SETTINGS_SOUND_ECHOCANCEL, ui.echocancelBox->isChecked(), SETTINGS_SOUND_ECHOCANCEL_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_SOUND_AGC, ui.agcBox->isChecked(), SETTINGS_SOUND_AGC_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_SOUND_DENOISING, ui.denoisingBox->isChecked(), SETTINGS_SOUND_DENOISING_DEFAULT);
+        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_BASS, ui.micEqBassSpinBox->value(), SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT);
+        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_MID, ui.micEqMidSpinBox->value(), SETTINGS_SOUND_MIC_EQ_MID_DEFAULT);
+        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_TREBLE, ui.micEqTrebleSpinBox->value(), SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT);
+        TT_SetSoundInputEqualizer(ttInst,
+                                  ui.micEqBassSpinBox->value(),
+                                  ui.micEqMidSpinBox->value(),
+                                  ui.micEqTrebleSpinBox->value());
 
         ttSettings->setValueOrClear(SETTINGS_SOUND_MEDIASTREAM_VOLUME, ui.mediavsvoiceSlider->value(), SETTINGS_SOUND_MEDIASTREAM_VOLUME_DEFAULT);
 
@@ -1339,6 +1352,9 @@ void PreferencesDlg::slotSoundDefaults()
     ui.echocancelBox->setChecked(DEFAULT_ECHO_ENABLE && echocapable);
     ui.agcBox->setChecked(DEFAULT_AGC_ENABLE);
     ui.denoisingBox->setChecked(DEFAULT_DENOISE_ENABLE);
+    ui.micEqBassSpinBox->setValue(SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT);
+    ui.micEqMidSpinBox->setValue(SETTINGS_SOUND_MIC_EQ_MID_DEFAULT);
+    ui.micEqTrebleSpinBox->setValue(SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT);
     ui.mediavsvoiceSlider->setValue(SETTINGS_SOUND_MEDIASTREAM_VOLUME_DEFAULT);
 }
 

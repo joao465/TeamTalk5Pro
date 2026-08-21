@@ -165,6 +165,8 @@ namespace teamtalk {
 
     soundsystem::SoundDeviceFeatures GetSoundDeviceFeatures(const SoundDeviceEffects& effects);
 
+    struct SoundInputEqualizerState;
+
     using filenode_t = std::shared_ptr< class FileNode >;
 
     class ClientNode
@@ -245,6 +247,7 @@ namespace teamtalk {
         int GetVoiceGainLevel();
 
         bool SetSoundPreprocess(const AudioPreprocessor& preprocessor);
+        bool SetSoundInputEqualizer(int bassdb, int middb, int trebledb);
         void SetSoundInputTone(StreamTypes streams, int frequency);
 
         bool StartRecordingMuxedAudioFile(const AudioCodec& codec,
@@ -527,6 +530,7 @@ namespace teamtalk {
         // active sound groups (shared master volume)
         ACE_Recursive_Thread_Mutex m_sndgrp_lock;
         SoundProperties m_soundprop;
+        std::unique_ptr<SoundInputEqualizerState> m_soundinput_equalizer;
         //log voice to files
         voicelogger_t m_voicelogger;
         // audio container for getting raw audio from users

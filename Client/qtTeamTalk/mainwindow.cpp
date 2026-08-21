@@ -3378,6 +3378,11 @@ void MainWindow::updateAudioStorage(bool enable, AudioStorageMode mode)
 
 void MainWindow::updateAudioConfig()
 {
+    TT_SetSoundInputEqualizer(ttInst,
+                              ttSettings->value(SETTINGS_SOUND_MIC_EQ_BASS, SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT).toInt(),
+                              ttSettings->value(SETTINGS_SOUND_MIC_EQ_MID, SETTINGS_SOUND_MIC_EQ_MID_DEFAULT).toInt(),
+                              ttSettings->value(SETTINGS_SOUND_MIC_EQ_TREBLE, SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT).toInt());
+
     bool denoise = ttSettings->value(SETTINGS_SOUND_DENOISING,
                                      SETTINGS_SOUND_DENOISING_DEFAULT).toBool();
     bool echocancel = ttSettings->value(SETTINGS_SOUND_ECHOCANCEL,

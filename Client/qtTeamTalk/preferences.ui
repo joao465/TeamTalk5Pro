@@ -1347,6 +1347,93 @@
            </widget>
           </item>
           <item>
+           <widget class="QGroupBox" name="micEqGroupBox">
+            <property name="title">
+             <string>Equalizador do microfone</string>
+            </property>
+            <layout class="QFormLayout" name="micEqFormLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="micEqBassLabel">
+               <property name="text">
+                <string>Graves</string>
+               </property>
+               <property name="buddy">
+                <cstring>micEqBassSpinBox</cstring>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="micEqBassSpinBox">
+               <property name="toolTip">
+                <string>Ajusta as frequências graves do microfone antes da transmissão</string>
+               </property>
+               <property name="minimum">
+                <number>-12</number>
+               </property>
+               <property name="maximum">
+                <number>12</number>
+               </property>
+               <property name="suffix">
+                <string> dB</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="micEqMidLabel">
+               <property name="text">
+                <string>Médios</string>
+               </property>
+               <property name="buddy">
+                <cstring>micEqMidSpinBox</cstring>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="micEqMidSpinBox">
+               <property name="toolTip">
+                <string>Ajusta as frequências médias do microfone antes da transmissão</string>
+               </property>
+               <property name="minimum">
+                <number>-12</number>
+               </property>
+               <property name="maximum">
+                <number>12</number>
+               </property>
+               <property name="suffix">
+                <string> dB</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="micEqTrebleLabel">
+               <property name="text">
+                <string>Agudos</string>
+               </property>
+               <property name="buddy">
+                <cstring>micEqTrebleSpinBox</cstring>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="micEqTrebleSpinBox">
+               <property name="toolTip">
+                <string>Ajusta as frequências agudas do microfone antes da transmissão</string>
+               </property>
+               <property name="minimum">
+                <number>-12</number>
+               </property>
+               <property name="maximum">
+                <number>12</number>
+               </property>
+               <property name="suffix">
+                <string> dB</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
            <layout class="QHBoxLayout" name="horizontalLayout_10">
             <item>
              <widget class="QLabel" name="label_34">

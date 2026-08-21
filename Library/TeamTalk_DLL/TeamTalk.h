@@ -4787,6 +4787,22 @@ extern "C" {
      * @return TRUE on success, FALSE on failure. */
     TEAMTALKDLL_API TTBOOL TT_SetSoundInputPreprocessEx(IN TTInstance* lpTTInstance,
                                                         IN const AudioPreprocessor* lpAudioPreprocessor);
+
+    /**
+     * @brief Configure a three-band equalizer for recorded microphone audio.
+     *
+     * The equalizer is applied to microphone PCM audio before voice encoding
+     * and transmission. A value of 0 dB leaves a band unchanged.
+     *
+     * @param lpTTInstance Pointer to client instance created by #TT_InitTeamTalk.
+     * @param nBassDB Bass adjustment from -12 to +12 dB.
+     * @param nMidDB Midrange adjustment from -12 to +12 dB.
+     * @param nTrebleDB Treble adjustment from -12 to +12 dB.
+     * @return TRUE on success, FALSE on failure. */
+    TEAMTALKDLL_API TTBOOL TT_SetSoundInputEqualizer(IN TTInstance* lpTTInstance,
+                                                     IN INT32 nBassDB,
+                                                     IN INT32 nMidDB,
+                                                     IN INT32 nTrebleDB);
     
     /** 
      * @brief Get the sound preprocessor settings which are currently
