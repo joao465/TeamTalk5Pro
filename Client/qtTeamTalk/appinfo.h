@@ -36,9 +36,9 @@
 #define APPTRAYICON_ACTIVE  QString::fromUtf8(":/images/images/teamtalkg.png")
 #define APPWEBSITE          "http://www.bearware.dk"
 
-#define APPTITLE            "TeamTalk 5 (pro 5.26.2)"
+#define APPTITLE            "TeamTalk 5 (Pro) (5.26.2)"
 #define APPNAME_SHORT       "TeamTalk5"
-#define CLIENTNAME          "TeamTalk 5 (pro 5.26.2)"
+#define CLIENTNAME          "teamtalk 5 (pro) 5.26.2)"
 #define APPSETTINGS_ORG     "TeamTalk 5 Pro"
 #define APPSETTINGS_NAME    "TeamTalk5Pro"
 
