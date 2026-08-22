@@ -537,6 +537,16 @@
              </layout>
             </item>
             <item>
+             <widget class="QCheckBox" name="disableMessageTimestampChkBox">
+              <property name="text">
+               <string>Desativar data e hora das mensagens</string>
+              </property>
+              <property name="toolTip">
+               <string>Oculta a data e a hora das mensagens privadas e das mensagens do canal</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <layout class="QHBoxLayout" name="horizontalLayout_18">
               <item>
                <widget class="QCheckBox" name="logstatusbarChkBox">
@@ -1358,14 +1368,17 @@
                 <string>Graves</string>
                </property>
                <property name="buddy">
-                <cstring>micEqBassSpinBox</cstring>
+                <cstring>micEqBassSlider</cstring>
                </property>
               </widget>
              </item>
              <item row="0" column="1">
-              <widget class="QSpinBox" name="micEqBassSpinBox">
+              <widget class="QSlider" name="micEqBassSlider">
                <property name="toolTip">
                 <string>Ajusta as frequências graves do microfone antes da transmissão</string>
+               </property>
+               <property name="accessibleName">
+                <string>Graves do equalizador do microfone</string>
                </property>
                <property name="minimum">
                 <number>-12</number>
@@ -1373,8 +1386,14 @@
                <property name="maximum">
                 <number>12</number>
                </property>
-               <property name="suffix">
-                <string> dB</string>
+               <property name="orientation">
+                <enum>Qt::Orientation::Horizontal</enum>
+               </property>
+               <property name="tickPosition">
+                <enum>QSlider::TickPosition::TicksBelow</enum>
+               </property>
+               <property name="tickInterval">
+                <number>3</number>
                </property>
               </widget>
              </item>
@@ -1384,14 +1403,17 @@
                 <string>Médios</string>
                </property>
                <property name="buddy">
-                <cstring>micEqMidSpinBox</cstring>
+                <cstring>micEqMidSlider</cstring>
                </property>
               </widget>
              </item>
              <item row="1" column="1">
-              <widget class="QSpinBox" name="micEqMidSpinBox">
+              <widget class="QSlider" name="micEqMidSlider">
                <property name="toolTip">
                 <string>Ajusta as frequências médias do microfone antes da transmissão</string>
+               </property>
+               <property name="accessibleName">
+                <string>MÃ©dios do equalizador do microfone</string>
                </property>
                <property name="minimum">
                 <number>-12</number>
@@ -1399,8 +1421,14 @@
                <property name="maximum">
                 <number>12</number>
                </property>
-               <property name="suffix">
-                <string> dB</string>
+               <property name="orientation">
+                <enum>Qt::Orientation::Horizontal</enum>
+               </property>
+               <property name="tickPosition">
+                <enum>QSlider::TickPosition::TicksBelow</enum>
+               </property>
+               <property name="tickInterval">
+                <number>3</number>
                </property>
               </widget>
              </item>
@@ -1410,14 +1438,17 @@
                 <string>Agudos</string>
                </property>
                <property name="buddy">
-                <cstring>micEqTrebleSpinBox</cstring>
+                <cstring>micEqTrebleSlider</cstring>
                </property>
               </widget>
              </item>
              <item row="2" column="1">
-              <widget class="QSpinBox" name="micEqTrebleSpinBox">
+              <widget class="QSlider" name="micEqTrebleSlider">
                <property name="toolTip">
                 <string>Ajusta as frequências agudas do microfone antes da transmissão</string>
+               </property>
+               <property name="accessibleName">
+                <string>Agudos do equalizador do microfone</string>
                </property>
                <property name="minimum">
                 <number>-12</number>
@@ -1425,8 +1456,14 @@
                <property name="maximum">
                 <number>12</number>
                </property>
-               <property name="suffix">
-                <string> dB</string>
+               <property name="orientation">
+                <enum>Qt::Orientation::Horizontal</enum>
+               </property>
+               <property name="tickPosition">
+                <enum>QSlider::TickPosition::TicksBelow</enum>
+               </property>
+               <property name="tickInterval">
+                <number>3</number>
                </property>
               </widget>
              </item>

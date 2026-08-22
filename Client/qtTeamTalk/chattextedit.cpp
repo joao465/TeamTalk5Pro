@@ -133,7 +133,7 @@ ChatTextEdit::ChatTextEdit(QWidget * parent/* = 0*/)
                             Qt::TextInteractionFlag::TextSelectableByKeyboard |
                             Qt::TextInteractionFlag::TextSelectableByMouse);
 }
-   
+
 QString ChatTextEdit::getTimeStamp(const QDateTime& tm)
 {
     QString dt = getFormattedDateTime(tm.toString("yyyy-MM-dd HH:mm:ss"), "yyyy-MM-dd HH:mm:ss");
@@ -145,11 +145,11 @@ void ChatTextEdit::updateServer(const ServerProperties& srvprop)
     appendPlainText("");
 
     QString dt = getTimeStamp(QDateTime::currentDateTime());
-    
+
     QTextCharFormat format = textCursor().charFormat();
     QTextCharFormat original = format;
     QTextCursor cursor = textCursor();
-    
+
     //show 'joined new channel' in bold
     QFont font = format.font();
     font.setBold(true);
@@ -189,11 +189,11 @@ void ChatTextEdit::joinedChannel(int channelid)
     appendPlainText("");
 
     QString dt = getTimeStamp(QDateTime::currentDateTime());
-    
+
     QTextCharFormat format = textCursor().charFormat();
     QTextCharFormat original = format;
     QTextCursor cursor = textCursor();
-    
+
     //show channel name in green
     QFont font = format.font();
     font.setBold(true);
@@ -232,7 +232,10 @@ QString ChatTextEdit::addTextMessage(const MyTextMessage& msg)
     if (!TT_GetUser(ttInst, msg.nFromUserID, &user))
         return QString();
 
-    QString dt = getTimeStamp(msg.receiveTime);
+    QString dt;
+    if (!ttSettings->value(SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP,
+                           SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP_DEFAULT).toBool())
+        dt = getTimeStamp(msg.receiveTime);
     QString line = dt;
 
     line += QString("%1\r\n%2").arg(getTextMessagePrefix(msg, user)).arg(msg.moreMessage);
@@ -297,7 +300,7 @@ void ChatTextEdit::updateTranslation()
 void ChatTextEdit::limitText()
 {
     QTextCursor cursor = this->textCursor();
-    
+
     cursor.movePosition(QTextCursor::End);
 
     while(cursor.position() > 0x20000)
@@ -367,7 +370,7 @@ void ChatTextEdit::mouseMoveEvent(QMouseEvent *e)
 void ChatTextEdit::mouseReleaseEvent(QMouseEvent *e)
 {
     QPlainTextEdit::mouseReleaseEvent(e);
-    
+
     if(e->button() == Qt::RightButton)
         return;
 

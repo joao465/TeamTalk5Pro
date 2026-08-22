@@ -133,7 +133,7 @@ PreferencesDlg::PreferencesDlg(SoundDevice& devin, SoundDevice& devout, QWidget 
         }
         tsfVarMenu.exec(QCursor::pos());
     });
-    
+
     //connection tab
     connect(ui.subdeskinputBtn, &QAbstractButton::clicked,
             this, &PreferencesDlg::slotDesktopAccess);
@@ -238,7 +238,7 @@ void PreferencesDlg::initDevices()
 {
     int default_inputid = SOUNDDEVICEID_DEFAULT, default_outputid = SOUNDDEVICEID_DEFAULT;
     TT_GetDefaultSoundDevices(&default_inputid, &default_outputid);
-    
+
     m_sounddevices = getSoundDevices();
 
     for (auto s : m_sounddevices)
@@ -284,11 +284,11 @@ void PreferencesDlg::initDevices()
     ui.agcBox->setChecked(ttSettings->value(SETTINGS_SOUND_AGC, SETTINGS_SOUND_AGC_DEFAULT).toBool());
     ui.denoisingBox->setChecked(ttSettings->value(SETTINGS_SOUND_DENOISING,
                                                   SETTINGS_SOUND_DENOISING_DEFAULT).toBool());
-    ui.micEqBassSpinBox->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_BASS,
+    ui.micEqBassSlider->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_BASS,
                                                     SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT).toInt());
-    ui.micEqMidSpinBox->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_MID,
+    ui.micEqMidSlider->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_MID,
                                                    SETTINGS_SOUND_MIC_EQ_MID_DEFAULT).toInt());
-    ui.micEqTrebleSpinBox->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_TREBLE,
+    ui.micEqTrebleSlider->setValue(ttSettings->value(SETTINGS_SOUND_MIC_EQ_TREBLE,
                                                       SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT).toInt());
     slotUpdateSoundCheckBoxes();
 }
@@ -296,7 +296,7 @@ void PreferencesDlg::initDevices()
 SoundSystem PreferencesDlg::getSoundSystem()
 {
     SoundSystem sndsys = SOUNDSYSTEM_NONE;
-    
+
     sndsys = SoundSystem(ui.sndSysBox->currentData().toInt());
 
     // ensure tab has been initialized, otherwise sound system will end up as 'none'
@@ -482,6 +482,9 @@ void PreferencesDlg::initDisplayTab()
     ui.lasttalkChkBox->setChecked(ttSettings->value(SETTINGS_DISPLAY_LASTTALK,
                                                     SETTINGS_DISPLAY_LASTTALK_DEFAULT).toBool());
     ui.timestampformatEdit->setText(ttSettings->value(SETTINGS_DISPLAY_TIMESTAMP_FORMAT, getTimestampFormat()).toString());
+    ui.disableMessageTimestampChkBox->setChecked(
+        ttSettings->value(SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP,
+                          SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP_DEFAULT).toBool());
     ui.chanexpChkBox->setChecked(ttSettings->value(SETTINGS_DISPLAY_CHANEXP, SETTINGS_DISPLAY_CHANEXP_DEFAULT).toBool());
     ui.logstatusbarChkBox->setChecked(ttSettings->value(SETTINGS_DISPLAY_LOGSTATUSBAR, SETTINGS_DISPLAY_LOGSTATUSBAR_DEFAULT).toBool());
     ui.updatesChkBox->setChecked(ttSettings->value(SETTINGS_DISPLAY_APPUPDATE, SETTINGS_DISPLAY_APPUPDATE_DEFAULT).toBool());
@@ -776,6 +779,9 @@ void PreferencesDlg::slotSaveChanges()
         ttSettings->setValueOrClear(SETTINGS_DISPLAY_USERSCOUNT, ui.usercountChkBox->isChecked(), SETTINGS_DISPLAY_USERSCOUNT_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_DISPLAY_LASTTALK, ui.lasttalkChkBox->isChecked(), SETTINGS_DISPLAY_LASTTALK_DEFAULT);
         ttSettings->setValue(SETTINGS_DISPLAY_TIMESTAMP_FORMAT, ui.timestampformatEdit->text());
+        ttSettings->setValueOrClear(SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP,
+                                    ui.disableMessageTimestampChkBox->isChecked(),
+                                    SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_DISPLAY_CHANEXP, ui.chanexpChkBox->isChecked(), SETTINGS_DISPLAY_CHANEXP_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_DISPLAY_LOGSTATUSBAR, ui.logstatusbarChkBox->isChecked(), SETTINGS_DISPLAY_LOGSTATUSBAR_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_DISPLAY_APPUPDATE, ui.updatesChkBox->isChecked(), SETTINGS_DISPLAY_APPUPDATE_DEFAULT);
@@ -953,13 +959,13 @@ void PreferencesDlg::slotSaveChanges()
         ttSettings->setValueOrClear(SETTINGS_SOUND_ECHOCANCEL, ui.echocancelBox->isChecked(), SETTINGS_SOUND_ECHOCANCEL_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_SOUND_AGC, ui.agcBox->isChecked(), SETTINGS_SOUND_AGC_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_SOUND_DENOISING, ui.denoisingBox->isChecked(), SETTINGS_SOUND_DENOISING_DEFAULT);
-        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_BASS, ui.micEqBassSpinBox->value(), SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT);
-        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_MID, ui.micEqMidSpinBox->value(), SETTINGS_SOUND_MIC_EQ_MID_DEFAULT);
-        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_TREBLE, ui.micEqTrebleSpinBox->value(), SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT);
+        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_BASS, ui.micEqBassSlider->value(), SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT);
+        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_MID, ui.micEqMidSlider->value(), SETTINGS_SOUND_MIC_EQ_MID_DEFAULT);
+        ttSettings->setValueOrClear(SETTINGS_SOUND_MIC_EQ_TREBLE, ui.micEqTrebleSlider->value(), SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT);
         TT_SetSoundInputEqualizer(ttInst,
-                                  ui.micEqBassSpinBox->value(),
-                                  ui.micEqMidSpinBox->value(),
-                                  ui.micEqTrebleSpinBox->value());
+                                  ui.micEqBassSlider->value(),
+                                  ui.micEqMidSlider->value(),
+                                  ui.micEqTrebleSlider->value());
 
         ttSettings->setValueOrClear(SETTINGS_SOUND_MEDIASTREAM_VOLUME, ui.mediavsvoiceSlider->value(), SETTINGS_SOUND_MEDIASTREAM_VOLUME_DEFAULT);
 
@@ -1024,7 +1030,7 @@ void PreferencesDlg::slotSaveChanges()
         {
             devapi = _Q(m_videodevices[viddev_index].szCaptureAPI);
             devid = _Q(m_videodevices[viddev_index].szDeviceID);
-            
+
             if(fmt_itemdata == CUSTOMVIDEOFORMAT_INDEX)
             {
                 m_vidfmt.picFourCC = FourCC(getCurrentItemData(ui.vidImgFmtBox).toInt());
@@ -1058,7 +1064,7 @@ void PreferencesDlg::slotSaveChanges()
         {
             TT_CloseVideoCaptureDevice(ttInst);
             if(!initVideoCaptureFromSettings())
-                QMessageBox::critical(this, tr("Video Device"), 
+                QMessageBox::critical(this, tr("Video Device"),
                 tr("Failed to initialize video device"));
         }
     }
@@ -1099,7 +1105,7 @@ void PreferencesDlg::slotCancelChanges()
     if(m_video_ready && (TT_GetFlags(ttInst) & CLIENT_VIDEOCAPTURE_READY) == 0)
     {
         if(!initVideoCaptureFromSettings())
-            QMessageBox::critical(this, tr("Video Device"), 
+            QMessageBox::critical(this, tr("Video Device"),
             tr("Failed to initialize video device"));
     }
 }
@@ -1263,7 +1269,7 @@ void PreferencesDlg::slotSoundRestart()
 
         success = initSelectedSoundDevices(m_devin, m_devout).empty();
     }
-    
+
     if(!success)
         QMessageBox::critical(this, tr("Refresh Sound Devices"),
                               tr("Failed to restart sound systems. Please restart application."));
@@ -1347,14 +1353,14 @@ void PreferencesDlg::slotSoundDefaults()
 
     setCurrentItemData(ui.inputdevBox, default_inputid);
     setCurrentItemData(ui.outputdevBox, default_outputid);
-    
+
     bool echocapable = isSoundDeviceEchoCapable(indev, outdev);
     ui.echocancelBox->setChecked(DEFAULT_ECHO_ENABLE && echocapable);
     ui.agcBox->setChecked(DEFAULT_AGC_ENABLE);
     ui.denoisingBox->setChecked(DEFAULT_DENOISE_ENABLE);
-    ui.micEqBassSpinBox->setValue(SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT);
-    ui.micEqMidSpinBox->setValue(SETTINGS_SOUND_MIC_EQ_MID_DEFAULT);
-    ui.micEqTrebleSpinBox->setValue(SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT);
+    ui.micEqBassSlider->setValue(SETTINGS_SOUND_MIC_EQ_BASS_DEFAULT);
+    ui.micEqMidSlider->setValue(SETTINGS_SOUND_MIC_EQ_MID_DEFAULT);
+    ui.micEqTrebleSlider->setValue(SETTINGS_SOUND_MIC_EQ_TREBLE_DEFAULT);
     ui.mediavsvoiceSlider->setValue(SETTINGS_SOUND_MEDIASTREAM_VOLUME_DEFAULT);
 }
 
@@ -1693,7 +1699,7 @@ void PreferencesDlg::slotTestVideoFormat()
     if(fmt_itemdata != CUSTOMVIDEOFORMAT_INDEX)
         m_vidfmt = m_videodevices[dev_index].videoFormats[fmt_itemdata];
 
-    if(TT_InitVideoCaptureDevice(ttInst, m_videodevices[dev_index].szDeviceID, 
+    if(TT_InitVideoCaptureDevice(ttInst, m_videodevices[dev_index].szDeviceID,
         &m_vidfmt))
     {
         QSize size;

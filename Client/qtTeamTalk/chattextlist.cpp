@@ -178,7 +178,10 @@ QString ChatTextList::addTextMessage(const MyTextMessage& msg)
     if (!TT_GetUser(ttInst, msg.nFromUserID, &user))
         return QString();
 
-    QString dt = getTimeStamp(msg.receiveTime);
+    QString dt;
+    if (!ttSettings->value(SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP,
+                           SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP_DEFAULT).toBool())
+        dt = getTimeStamp(msg.receiveTime);
     QString sender = getTextMessagePrefix(msg, user);
     QString content = msg.moreMessage;
 

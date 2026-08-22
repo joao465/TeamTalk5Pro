@@ -96,6 +96,8 @@
 #define SETTINGS_DISPLAY_SERVNAME                     "display/show-servname"
 #define SETTINGS_DISPLAY_SERVNAME_DEFAULT              true
 #define SETTINGS_DISPLAY_TIMESTAMP_FORMAT               "display/timestamp-format"
+#define SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP       "display/disable-message-timestamp"
+#define SETTINGS_DISPLAY_DISABLE_MESSAGE_TIMESTAMP_DEFAULT false
 #define SETTINGS_DISPLAY_STARTMINIMIZED             "display/startminimized"
 #define SETTINGS_DISPLAY_MAINWINDOWPOS              "display/windowposition"
 #define SETTINGS_DISPLAY_TEXTMSGWINDOWPOS           "display/textmsg-windowposition"
