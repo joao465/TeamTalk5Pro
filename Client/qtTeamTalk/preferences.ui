@@ -1413,7 +1413,7 @@
                 <string>Ajusta as frequências médias do microfone antes da transmissão</string>
                </property>
                <property name="accessibleName">
-                <string>MÃ©dios do equalizador do microfone</string>
+                <string>Médios do equalizador do microfone</string>
                </property>
                <property name="minimum">
                 <number>-12</number>

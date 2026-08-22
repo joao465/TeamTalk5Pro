@@ -150,8 +150,8 @@ MainWindow::MainWindow(const QString& cfgfile)
                                      arg(_Q(TT_GetVersion())).
                                      arg(APPNAME_SHORT));
 
-    QApplication::setOrganizationName(COMPANYNAME);
-    QApplication::setApplicationName(APPNAME_SHORT);
+    QApplication::setOrganizationName(APPSETTINGS_ORG);
+    QApplication::setApplicationName(APPSETTINGS_NAME);
     
     //figure out where to load settings from
     QString inipath = QApplication::applicationDirPath();
