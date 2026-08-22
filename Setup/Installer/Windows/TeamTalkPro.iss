@@ -20,7 +20,6 @@ OutputBaseFilename=TeamTalk_5_Pro_5.26.2_Setup_x64
 SetupIconFile=..\..\..\Client\qtTeamTalk\images\teamtalk.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
-LicenseFile=License.txt
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
