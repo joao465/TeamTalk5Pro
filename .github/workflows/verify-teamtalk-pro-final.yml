@@ -1,0 +1,203 @@
+name: Verify TeamTalk Pro final build
+
+on:
+  push:
+    branches: [ "teamtalk-pro-mic-eq" ]
+    paths:
+      - ".github/workflows/verify-teamtalk-pro-final.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: verify-teamtalk-pro-final-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        ref: teamtalk-pro-mic-eq
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        arch: win64_msvc2022_64
+        version: '6.11.1'
+        modules: 'qtmultimedia qtspeech'
+        setup-python: false
+        cache: true
+        cache-key-prefix: teamtalk-fast-qt
+        aqtsource: 'aqtinstall@git+https://github.com/miurahr/aqtinstall.git@master'
+
+    - name: Install MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MSYS
+        path-type: inherit
+        update: true
+        install: base-devel
+        release: false
+
+    - name: Install NASM
+      working-directory: ${{ runner.workspace }}
+      shell: cmd
+      run: |
+        curl -L -o nasm.zip https://www.nasm.us/pub/nasm/releasebuilds/3.01/win64/nasm-3.01-win64.zip
+        7z x nasm.zip
+        echo %CD%\nasm-3.01>> %GITHUB_PATH%
+
+    - name: Install Inno Setup
+      shell: pwsh
+      run: |
+        choco install innosetup --yes --no-progress
+
+    - name: Cache TeamTalk toolchain
+      id: toolchain-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.workspace }}/install-toolchain
+        key: teamtalk-toolchain-win64-${{ hashFiles('Build/**', 'Library/TeamTalkLib/**/CMakeLists.txt', 'CMakeLists.txt') }}
+        restore-keys: |
+          teamtalk-toolchain-win64-
+
+    - name: Configure final client
+      working-directory: ${{ runner.workspace }}
+      shell: pwsh
+      run: |
+        $externalProjects = "ON"
+        if ("${{ steps.toolchain-cache.outputs.cache-hit }}" -eq "true") {
+          $externalProjects = "OFF"
+        }
+
+        cmake -S TeamTalk5 -B verify-final -A x64 `
+          -DBUILD_TEAMTALK_LIBRARIES=OFF `
+          -DBUILD_TEAMTALK_SERVERS=OFF `
+          -DBUILD_TEAMTALK_DOCUMENTATION=OFF `
+          -DFEATURE_WEBRTC=OFF `
+          -DTOOLCHAIN_BUILD_EXTERNALPROJECTS=$externalProjects `
+          -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain
+
+    - name: Build final TeamTalk client
+      working-directory: ${{ runner.workspace }}
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        cmake --build verify-final --parallel --config Release --target TeamTalk5
+        cmake --build verify-final --parallel --config Release --target QtTeamTalk5-windeploy-release
+
+    - name: Validate final source identity
+      shell: pwsh
+      run: |
+        $app = [IO.File]::ReadAllText("${{ github.workspace }}\Client\qtTeamTalk\appinfo.h")
+        $sdk = [IO.File]::ReadAllText("${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk.h")
+        $protocol = [IO.File]::ReadAllText("${{ github.workspace }}\Library\TeamTalkLib\teamtalk\Commands.h")
+        $client = [IO.File]::ReadAllText("${{ github.workspace }}\Library\TeamTalkLib\teamtalk\client\ClientNode.cpp")
+        $main = [IO.File]::ReadAllText("${{ github.workspace }}\Client\qtTeamTalk\mainwindow.cpp")
+
+        if (-not $app.Contains('#define APPTITLE            "TeamTalk 5 (Pro) (5.26.2)"')) { throw "APPTITLE incorreto" }
+        if (-not $app.Contains('#define CLIENTNAME          "teamtalk 5 (pro) 5.26.2)"')) { throw "CLIENTNAME incorreto" }
+        if (-not $sdk.Contains('#define TEAMTALK_VERSION "5.26.2.5202"')) { throw "SDK incorreto" }
+        if (-not $protocol.Contains('#define TEAMTALK_PROTOCOL_VERSION ACE_TEXT("5.14")')) { throw "Protocolo foi alterado" }
+        if (-not $client.Contains('std::clamp(bass_db, 0, 100)')) { throw "EQ graves nao esta 0..100" }
+        if (-not $main.Contains('return QString(APPTITLE);')) { throw "Titulo da janela nao esta fixo" }
+
+    - name: Create portable and installer source
+      shell: pwsh
+      run: |
+        $stage = "${{ runner.workspace }}\teamtalk-pro-5.26.2-portable-win64-verified"
+        $client = Join-Path $stage "Client"
+        $installerSource = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-source-verified"
+
+        Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $installerSource -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $client | Out-Null
+
+        Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\TeamTalk5.exe" $client -Force
+
+        $dll = Get-ChildItem "${{ github.workspace }}\Library" -Filter "TeamTalk5.dll" -Recurse |
+          Where-Object { $_.FullName -notmatch "\\test\\" } |
+          Select-Object -First 1
+        if (-not $dll) { throw "TeamTalk5.dll nao encontrado" }
+        Copy-Item $dll.FullName $client -Force
+
+        Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\windeployqt\*" $client -Recurse -Force
+
+        $languages = Join-Path $client "languages"
+        New-Item -ItemType Directory -Force -Path $languages | Out-Null
+        Get-ChildItem "${{ github.workspace }}\Client\qtTeamTalk\languages" -Filter "*.qm" -ErrorAction SilentlyContinue |
+          Copy-Item -Destination $languages
+
+        Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini") -Force
+        Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini.default") -Force
+        Copy-Item "${{ github.workspace }}\Setup\Client\Sounds" (Join-Path $client "Sounds") -Recurse -Force
+        Copy-Item "${{ github.workspace }}\Setup\Installer\Windows\License.txt" (Join-Path $stage "License.txt") -Force
+
+        New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
+        Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
+        Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
+
+    - name: Build verified installer
+      shell: pwsh
+      run: |
+        $installerSource = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-source-verified"
+        $installerOut = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-win64-verified"
+        $iss = "${{ github.workspace }}\Setup\Installer\Windows\TeamTalkPro.iss"
+
+        Remove-Item $installerOut -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $installerOut | Out-Null
+
+        $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+        if (-not (Test-Path $iscc)) {
+          $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if ($cmd) { $iscc = $cmd.Source }
+        }
+        if (-not (Test-Path $iscc)) { throw "ISCC.exe nao encontrado" }
+
+        $defineArg = "-dClientDir=$installerSource"
+        & $iscc $defineArg $iss
+        if ($LASTEXITCODE -ne 0) { throw "Inno Setup falhou com codigo $LASTEXITCODE" }
+
+        $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        if (-not (Test-Path $builtSetup)) { throw "Instalador nao encontrado" }
+
+        $setup = Join-Path $installerOut "TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        Copy-Item $builtSetup $setup -Force
+
+    - name: Upload verified portable
+      uses: actions/upload-artifact@v7
+      with:
+        name: teamtalk-pro-5.26.2-portable-win64-verified
+        path: ${{ runner.workspace }}/teamtalk-pro-5.26.2-portable-win64-verified
+        if-no-files-found: error
+
+    - name: Upload verified installer
+      uses: actions/upload-artifact@v7
+      with:
+        name: teamtalk-pro-5.26.2-installer-win64-verified
+        path: ${{ runner.workspace }}/teamtalk-pro-5.26.2-installer-win64-verified/TeamTalk_5_Pro_5.26.2_Setup_x64.exe
+        if-no-files-found: error
+
+    - name: Record verification result
+      if: always()
+      shell: pwsh
+      env:
+        FINAL_STATUS: ${{ job.status }}
+      run: |
+        $sha = git rev-parse HEAD
+        $text = @"
+        status=$env:FINAL_STATUS
+        workflow_run=$env:GITHUB_RUN_ID
+        built_sha=$sha
+        "@
+        [IO.File]::WriteAllText("teamtalk-pro-final-build-status.txt", $text.Trim() + "`n")
+        git config user.name "ChatGPT TeamTalk Build"
+        git config user.email "actions@github.com"
+        git add -- teamtalk-pro-final-build-status.txt
+        git commit -m "Record TeamTalk Pro final build status"
+        git push origin HEAD:teamtalk-pro-mic-eq
