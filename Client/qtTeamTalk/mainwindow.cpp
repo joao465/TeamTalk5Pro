@@ -2752,7 +2752,7 @@ QString MainWindow::getTitle()
     QString title = APPTITLE;
     if ((TT_GetFlags(ttInst) & CLIENT_AUTHORIZED) && _Q(m_srvprop.szServerName).size())
     {
-        title = QString("TeamTalk 5 (Pro) - %1 (%2)")
+        title = QString("%1 - TeamTalk 5 (Pro) (%2)")
                     .arg(limitText(_Q(m_srvprop.szServerName)))
                     .arg(APPVERSION_SHORT);
     }
