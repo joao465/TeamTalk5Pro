@@ -38,7 +38,7 @@
 
 #define APPTITLE            "TeamTalk 5 (Pro) (5.26.2)"
 #define APPNAME_SHORT       "TeamTalk5"
-#define CLIENTNAME          "teamtalk 5 (pro) 5.26.2)"
+#define CLIENTNAME          "TeamTalk 5"
 #define APPSETTINGS_ORG     "TeamTalk 5 Pro"
 #define APPSETTINGS_NAME    "TeamTalk5Pro"
 
@@ -94,4 +94,3 @@
 #endif
 
 #endif
-
