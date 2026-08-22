@@ -174,17 +174,26 @@ jobs:
           throw "ISCC.exe do Inno Setup nao foi encontrado"
         }
 
-        $defineArg = '-DClientDir="' + $installerSource + '"'
-        $outputArg = '-O"' + $installerOut + '"'
+        # Deixa o Inno Setup usar a pasta Output padrao.
+        # Depois copiamos o EXE pronto para a pasta do artifact.
+        # Isso evita o erro de caminho D:\D:\... no runner.
+        $defineArg = "-dClientDir=$installerSource"
 
-        & $iscc $defineArg $outputArg $iss
+        & $iscc $defineArg $iss
         if ($LASTEXITCODE -ne 0) {
           throw "Inno Setup falhou com codigo $LASTEXITCODE"
         }
 
+        $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        if (-not (Test-Path $builtSetup)) {
+          throw "O instalador foi compilado, mas o EXE nao foi encontrado em: $builtSetup"
+        }
+
         $setup = Join-Path $installerOut "TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        Copy-Item $builtSetup $setup -Force
+
         if (-not (Test-Path $setup)) {
-          throw "O instalador final nao foi criado"
+          throw "Falha ao copiar o instalador final para a pasta do artifact"
         }
 
     - name: Upload portable client
