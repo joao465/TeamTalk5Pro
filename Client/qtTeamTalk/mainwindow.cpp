@@ -2749,7 +2749,14 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message,
 
 QString MainWindow::getTitle()
 {
-    return QString(APPTITLE);
+    QString title = APPTITLE;
+    if ((TT_GetFlags(ttInst) & CLIENT_AUTHORIZED) && _Q(m_srvprop.szServerName).size())
+    {
+        title = QString("TeamTalk 5 (Pro) - %1 (%2)")
+                    .arg(limitText(_Q(m_srvprop.szServerName)))
+                    .arg(APPVERSION_SHORT);
+    }
+    return title;
 }
 
 void MainWindow::updateWindowTitle()
