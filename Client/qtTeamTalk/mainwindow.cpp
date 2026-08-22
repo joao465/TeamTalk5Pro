@@ -901,6 +901,9 @@ void MainWindow::initialScreenReaderSetup()
 #endif
             ttSettings->setValue(SETTINGS_DISPLAY_VU_METER_UPDATES, false);
             ttSettings->setValue(SETTINGS_DISPLAY_CHAT_HISTORY_LISTVIEW, true);
+            // setupChatHistory() ran before the first-start accessibility setup.
+            // Rebuild it now so the checked list-view option is immediately active.
+            setupChatHistory();
         }
     }
 }
@@ -2201,7 +2204,7 @@ void MainWindow::login()
     QString nick = ttSettings->value(SETTINGS_GENERAL_NICKNAME, SETTINGS_GENERAL_NICKNAME_DEFAULT).toString();
     if(m_host.nickname.size())
         nick = m_host.nickname;
-    QString client = QString("%1 (%2)").arg(APPNAME_SHORT).arg(QSysInfo::prettyProductName());
+    QString client = QString("%1 (%2)").arg(CLIENTNAME).arg(QSysInfo::prettyProductName());
     int cmdid = TT_DoLoginEx(ttInst, _W(nick), _W(m_host.username),
                              _W(m_host.password), _W(client));
     if (cmdid>0)
@@ -2258,7 +2261,7 @@ void MainWindow::showTTErrorMessage(const ClientErrorMsg& msg, CommandComplete c
                 nickname = m_host.nickname;
             int cmdid = TT_DoLoginEx(ttInst, _W(nickname), 
                                      _W(m_host.username), _W(m_host.password), 
-                                     _W(QString(APPNAME_SHORT)));
+                                     _W(QString(CLIENTNAME)));
             if (cmdid > 0)
                 m_commands.insert(cmdid, CMD_COMPLETE_LOGIN);
         }
