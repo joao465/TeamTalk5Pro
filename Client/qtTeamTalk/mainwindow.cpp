@@ -2749,31 +2749,7 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message,
 
 QString MainWindow::getTitle()
 {
-    QString profilename, title = APPTITLE;
-    if(ttSettings)
-        profilename = ttSettings->value(SETTINGS_GENERAL_PROFILENAME).toString();
-
-    bool Servname = ttSettings->value(SETTINGS_DISPLAY_SERVNAME, SETTINGS_DISPLAY_SERVNAME_DEFAULT).toBool();
-    if(m_mychannel.nChannelID > 0 &&
-       m_mychannel.nChannelID != TT_GetRootChannelID(ttInst))
-    {
-        if (Servname)
-        {
-            title = QString("%1/%2 - %3").arg(limitText(_Q(m_srvprop.szServerName))).arg(limitText(_Q(m_mychannel.szName))).arg(APPTITLE);
-        }
-        else
-        {
-            title = QString("%1 - %2").arg(limitText(_Q(m_mychannel.szName))).arg(APPTITLE);
-        }
-    }
-    else if (TT_GetFlags(ttInst) & CLIENT_AUTHORIZED)
-    {
-        title = QString("%1 - %2").arg(limitText(_Q(m_srvprop.szServerName))).arg(APPTITLE);
-    }
-
-    if(profilename.size())
-        title = QString("%1 - %2").arg(title).arg(profilename);
-    return title;
+    return QString(APPTITLE);
 }
 
 void MainWindow::updateWindowTitle()

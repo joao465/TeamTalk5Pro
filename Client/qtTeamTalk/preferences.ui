@@ -1375,16 +1375,16 @@
              <item row="0" column="1">
               <widget class="QSlider" name="micEqBassSlider">
                <property name="toolTip">
-                <string>Ajusta as frequências graves do microfone antes da transmissão</string>
+                <string>Ajusta as frequências graves do microfone antes da transmissão. 0 é o padrão e 100 é o máximo.</string>
                </property>
                <property name="accessibleName">
                 <string>Graves do equalizador do microfone</string>
                </property>
                <property name="minimum">
-                <number>-12</number>
+                <number>0</number>
                </property>
                <property name="maximum">
-                <number>12</number>
+                <number>100</number>
                </property>
                <property name="orientation">
                 <enum>Qt::Orientation::Horizontal</enum>
@@ -1393,7 +1393,7 @@
                 <enum>QSlider::TickPosition::TicksBelow</enum>
                </property>
                <property name="tickInterval">
-                <number>3</number>
+                <number>10</number>
                </property>
               </widget>
              </item>
@@ -1410,16 +1410,16 @@
              <item row="1" column="1">
               <widget class="QSlider" name="micEqMidSlider">
                <property name="toolTip">
-                <string>Ajusta as frequências médias do microfone antes da transmissão</string>
+                <string>Ajusta as frequências médias do microfone antes da transmissão. 0 é o padrão e 100 é o máximo.</string>
                </property>
                <property name="accessibleName">
                 <string>Médios do equalizador do microfone</string>
                </property>
                <property name="minimum">
-                <number>-12</number>
+                <number>0</number>
                </property>
                <property name="maximum">
-                <number>12</number>
+                <number>100</number>
                </property>
                <property name="orientation">
                 <enum>Qt::Orientation::Horizontal</enum>
@@ -1428,7 +1428,7 @@
                 <enum>QSlider::TickPosition::TicksBelow</enum>
                </property>
                <property name="tickInterval">
-                <number>3</number>
+                <number>10</number>
                </property>
               </widget>
              </item>
@@ -1445,16 +1445,16 @@
              <item row="2" column="1">
               <widget class="QSlider" name="micEqTrebleSlider">
                <property name="toolTip">
-                <string>Ajusta as frequências agudas do microfone antes da transmissão</string>
+                <string>Ajusta as frequências agudas do microfone antes da transmissão. 0 é o padrão e 100 é o máximo.</string>
                </property>
                <property name="accessibleName">
                 <string>Agudos do equalizador do microfone</string>
                </property>
                <property name="minimum">
-                <number>-12</number>
+                <number>0</number>
                </property>
                <property name="maximum">
-                <number>12</number>
+                <number>100</number>
                </property>
                <property name="orientation">
                 <enum>Qt::Orientation::Horizontal</enum>
@@ -1463,7 +1463,7 @@
                 <enum>QSlider::TickPosition::TicksBelow</enum>
                </property>
                <property name="tickInterval">
-                <number>3</number>
+                <number>10</number>
                </property>
               </widget>
              </item>

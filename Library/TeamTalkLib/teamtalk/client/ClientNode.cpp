@@ -175,9 +175,9 @@ struct SoundInputEqualizerState
 
     void SetBands(int bass_db, int mid_db, int treble_db)
     {
-        bass_db = std::clamp(bass_db, -12, 12);
-        mid_db = std::clamp(mid_db, -12, 12);
-        treble_db = std::clamp(treble_db, -12, 12);
+        bass_db = std::clamp(bass_db, 0, 100);
+        mid_db = std::clamp(mid_db, 0, 100);
+        treble_db = std::clamp(treble_db, 0, 100);
 
         if (bassdb != bass_db || middb != mid_db || trebledb != treble_db)
         {
@@ -202,9 +202,15 @@ struct SoundInputEqualizerState
         double const mid_hz = std::min(1200.0, nyquist * 0.60);
         double const treble_hz = std::min(4500.0, nyquist * 0.84);
 
-        ConfigureLowShelf(bass, double(samplerate), bass_hz, double(bassdb));
-        ConfigurePeak(mid, double(samplerate), mid_hz, 0.8, double(middb));
-        ConfigureHighShelf(treble, double(samplerate), treble_hz, double(trebledb));
+        // User-facing scale: 0 is flat/default and 100 is maximum.
+        // Internally 0..100 maps smoothly to 0..+12 dB.
+        double const bass_gain_db = double(bassdb) * 12.0 / 100.0;
+        double const mid_gain_db = double(middb) * 12.0 / 100.0;
+        double const treble_gain_db = double(trebledb) * 12.0 / 100.0;
+
+        ConfigureLowShelf(bass, double(samplerate), bass_hz, bass_gain_db);
+        ConfigurePeak(mid, double(samplerate), mid_hz, 0.8, mid_gain_db);
+        ConfigureHighShelf(treble, double(samplerate), treble_hz, treble_gain_db);
         dirty = false;
     }
 

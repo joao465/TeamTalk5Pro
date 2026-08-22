@@ -16,7 +16,7 @@
  * client's version can be seen in the @a szVersion member of the
  * #User struct. */
 
-#define TEAMTALK_VERSION "5.23.0.5202"
+#define TEAMTALK_VERSION "5.26.2.5202"
 
 
 #if defined(WIN32)
@@ -4792,12 +4792,12 @@ extern "C" {
      * @brief Configure a three-band equalizer for recorded microphone audio.
      *
      * The equalizer is applied to microphone PCM audio before voice encoding
-     * and transmission. A value of 0 dB leaves a band unchanged.
+     * and transmission. A value of 0 leaves a band unchanged.
      *
      * @param lpTTInstance Pointer to client instance created by #TT_InitTeamTalk.
-     * @param nBassDB Bass adjustment from -12 to +12 dB.
-     * @param nMidDB Midrange adjustment from -12 to +12 dB.
-     * @param nTrebleDB Treble adjustment from -12 to +12 dB.
+     * @param nBassDB Bass level from 0 (flat/default) to 100 (maximum +12 dB).
+     * @param nMidDB Midrange level from 0 (flat/default) to 100 (maximum +12 dB).
+     * @param nTrebleDB Treble level from 0 (flat/default) to 100 (maximum +12 dB).
      * @return TRUE on success, FALSE on failure. */
     TEAMTALKDLL_API TTBOOL TT_SetSoundInputEqualizer(IN TTInstance* lpTTInstance,
                                                      IN INT32 nBassDB,
