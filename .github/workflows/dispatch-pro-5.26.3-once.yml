@@ -1,0 +1,21 @@
+name: Dispatch TeamTalk Pro 5.26.3 Once
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "RELEASE_5_26_3_REQUEST.txt"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch TeamTalk Pro 5.26.3 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish-pro-release.yml --repo "${{ github.repository }}" --ref teamtalk-pro-mic-eq -f version=5.26.3
