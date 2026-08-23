@@ -12,40 +12,62 @@ permissions:
 jobs:
   patch-secondary-audio:
     if: github.head_ref == 'teamtalk-pro-mic-eq'
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: teamtalk-pro-mic-eq
+          fetch-depth: 0
+
+      - name: Restore original patch source
+        shell: bash
+        run: |
+          git show d3fd1dbce3000a3ec9db8cb4c9184b3c5370defb:.github/workflows/add-secondary-audio-input-once.yml > /tmp/old-secondary.yml
+          python - <<'PY'
+          import base64, gzip, re, pathlib
+          y = pathlib.Path('/tmp/old-secondary.yml').read_text(encoding='utf-8')
+          m = re.search(r'PATCH_B64:\s*([A-Za-z0-9+/=]+)', y)
+          if not m:
+              raise SystemExit('PATCH_B64 not found')
+          pathlib.Path('/tmp/secondary_patch.py').write_bytes(gzip.decompress(base64.b64decode(m.group(1))))
+          PY
+
+      - name: Prepare current source for patch
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('Library/TeamTalk_DLL/TeamTalk.h')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(' ' * 51 + 'IN INT32 nInputDeviceID);', ' ' * 41 + 'IN INT32 nInputDeviceID);')
+          p.write_text(s, encoding='utf-8', newline='\n')
+
+          p = Path('Library/TeamTalkLib/teamtalk/client/ClientNode.cpp')
+          s = p.read_text(encoding='utf-8')
+          old = '        CloseVideoCapture();\n        m_mediaplayback_streams.clear(); //clear all players before removing sound group\n        CloseSoundInputDevice();'
+          new = '        CloseVideoCapture();\n        CloseSoundInputDevice();\n        m_mediaplayback_streams.clear(); //clear all players before removing sound group'
+          s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8', newline='\n')
 
       - name: Apply secondary microphone patch
-        shell: pwsh
-        env:
-          PATCH_B64: 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
+        shell: bash
+        run: python /tmp/secondary_patch.py
+
+      - name: Preserve current cleanup ordering
+        if: success()
+        shell: python
         run: |
-          $clientPath = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"
-          $client = Get-Content $clientPath -Raw
-          $eol = if ($client.Contains("`r`n")) { "`r`n" } else { "`n" }
-          $currentBlock = "        CloseVideoCapture();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group${eol}        CloseSoundInputDevice();"
-          $patchBlock = "        CloseVideoCapture();${eol}        CloseSoundInputDevice();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group"
-          if (-not $client.Contains($currentBlock)) { throw "Current ClientNode destructor block not found" }
-          $client = $client.Replace($currentBlock, $patchBlock)
-          [IO.File]::WriteAllText((Resolve-Path $clientPath), $client, [Text.UTF8Encoding]::new($false))
-
-          python -c "import os,base64,gzip; exec(gzip.decompress(base64.b64decode(os.environ['PATCH_B64'])))"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          $client = Get-Content $clientPath -Raw
-          $eol = if ($client.Contains("`r`n")) { "`r`n" } else { "`n" }
-          $patchedBlock = "        CloseVideoCapture();${eol}        CloseSecondarySoundInputDevice();${eol}        CloseSoundInputDevice();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group"
-          $finalBlock = "        CloseVideoCapture();${eol}        CloseSecondarySoundInputDevice();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group${eol}        CloseSoundInputDevice();"
-          if (-not $client.Contains($patchedBlock)) { throw "Patched ClientNode destructor block not found" }
-          $client = $client.Replace($patchedBlock, $finalBlock)
-          [IO.File]::WriteAllText((Resolve-Path $clientPath), $client, [Text.UTF8Encoding]::new($false))
+          from pathlib import Path
+          p = Path('Library/TeamTalkLib/teamtalk/client/ClientNode.cpp')
+          s = p.read_text(encoding='utf-8')
+          old = '        CloseVideoCapture();\n        CloseSecondarySoundInputDevice();\n        CloseSoundInputDevice();\n        m_mediaplayback_streams.clear(); //clear all players before removing sound group'
+          new = '        CloseVideoCapture();\n        CloseSecondarySoundInputDevice();\n        m_mediaplayback_streams.clear(); //clear all players before removing sound group\n        CloseSoundInputDevice();'
+          s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8', newline='\n')
 
       - name: Commit secondary audio input
-        shell: pwsh
+        if: success()
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
