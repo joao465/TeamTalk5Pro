@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versão a publicar, por exemplo 5.26.3"
+        description: "Versão a publicar, por exemplo 5.26.5"
         required: true
-        default: "5.26.2"
+        default: "5.26.5"
         type: string
 
 permissions:
@@ -25,74 +25,55 @@ jobs:
         with:
           submodules: true
 
-      - name: Resolve Pro version
+      - name: Resolve Pro and SDK versions
         shell: pwsh
         run: |
           $version = "${{ inputs.version }}"
           if ([string]::IsNullOrWhiteSpace($version)) {
-            $version = "${{ github.ref_name }}"
-            $version = $version -replace '^pro-v', ''
+            $version = "${{ github.ref_name }}" -replace '^pro-v', ''
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
-            throw "Versao invalida: $version. Use algo como 5.26.3"
+            throw "Versao invalida: $version"
           }
 
           $parts = $version.Split('.')
-          $sdkVersion = "5.22.$($parts[2])"
+          if ($parts.Count -ge 4) {
+            $sdkVersion = $version
+          } else {
+            $suffix = "{0:D2}" -f [int]$parts[2]
+            $sdkVersion = "$version.52$suffix"
+          }
 
           "PRO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PRO_SDK_VERSION=$sdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Publishing TeamTalk Pro $version with SDK $sdkVersion"
+          Write-Host "Publishing native TeamTalk Pro $version with SDK $sdkVersion"
 
-      - name: Stamp application and SDK version
+      - name: Stamp native application and SDK version
         shell: pwsh
         run: |
-          $appPath = "Client/qtTeamTalk/appinfo.h"
+          $appPath = "Client/TeamTalkClassic/AppInfo.h"
           $appText = Get-Content $appPath -Raw
-          $appVersion = '#define APPVERSION_SHORT    "' + $env:PRO_VERSION + '"'
-          $appText = [regex]::Replace($appText, '#define APPVERSION_SHORT\s+"[^"]+"', $appVersion)
-          $appText = [regex]::Replace($appText, '#define CLIENTNAME\s+"[^"]+"', '#define CLIENTNAME          "TeamTalk5Pro"')
+          $appText = [regex]::Replace($appText, '#define APPVERSION_SHORT\s+_T\("[^"]+"\)', '#define APPVERSION_SHORT        _T("' + $env:PRO_VERSION + '")')
           Set-Content -Path $appPath -Value $appText -Encoding utf8NoBOM
-
-          $mainPath = "Client/qtTeamTalk/mainwindow.cpp"
-          $mainText = Get-Content $mainPath -Raw
-          $mainText = [regex]::Replace(
-            $mainText,
-            'QString client = QString\("%1 \(%2\)"\)\.arg\(CLIENTNAME\)\.arg\(QSysInfo::prettyProductName\(\)\);',
-            'QString client = QString(CLIENTNAME);')
-          Set-Content -Path $mainPath -Value $mainText -Encoding utf8NoBOM
 
           $sdkHeaderPath = "Library/TeamTalk_DLL/TeamTalk.h"
           $sdkHeaderText = Get-Content $sdkHeaderPath -Raw
-          $sdkHeaderVersion = '#define TEAMTALK_VERSION "' + $env:PRO_SDK_VERSION + '"'
-          $sdkHeaderText = [regex]::Replace($sdkHeaderText, '#define TEAMTALK_VERSION\s+"[^"]+"', $sdkHeaderVersion)
+          $sdkHeaderText = [regex]::Replace($sdkHeaderText, '#define TEAMTALK_VERSION\s+"[^"]+"', '#define TEAMTALK_VERSION "' + $env:PRO_SDK_VERSION + '"')
           Set-Content -Path $sdkHeaderPath -Value $sdkHeaderText -Encoding utf8NoBOM
 
           $sdkDefsPath = "Library/TeamTalkLib/TeamTalkDefs.h"
           $sdkDefsText = Get-Content $sdkDefsPath -Raw
           $sdkParts = $env:PRO_SDK_VERSION.Split('.')
-          $sdkRcVersion = "$($sdkParts[0]),$($sdkParts[1]),$($sdkParts[2]),0"
-          $sdkRcFileVersion = "$($sdkParts[0]), $($sdkParts[1]), $($sdkParts[2]), 0"
+          $sdkRcVersion = "$($sdkParts[0]),$($sdkParts[1]),$($sdkParts[2]),$($sdkParts[3])"
+          $sdkRcFileVersion = "$($sdkParts[0]), $($sdkParts[1]), $($sdkParts[2]), $($sdkParts[3])"
           $sdkDefsText = [regex]::Replace($sdkDefsText, '#define TEAMTALK_VERSION\s+"[^"]+"', '#define TEAMTALK_VERSION            "' + $env:PRO_SDK_VERSION + '"')
           $sdkDefsText = [regex]::Replace($sdkDefsText, '#define TEAMTALK_RC_VERSION\s+[^\r\n]+', '#define TEAMTALK_RC_VERSION         ' + $sdkRcVersion)
           $sdkDefsText = [regex]::Replace($sdkDefsText, '#define TEAMTALK_RC_FILEVERSION\s+"[^"]+"', '#define TEAMTALK_RC_FILEVERSION     "' + $sdkRcFileVersion + '"')
           Set-Content -Path $sdkDefsPath -Value $sdkDefsText -Encoding utf8NoBOM
 
-          Select-String -Path $appPath -Pattern 'APPVERSION_SHORT|CLIENTNAME'
+          Select-String -Path $appPath -Pattern 'APPVERSION_SHORT'
           Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION'
           Select-String -Path $sdkDefsPath -Pattern 'TEAMTALK_VERSION|TEAMTALK_RC_VERSION|TEAMTALK_RC_FILEVERSION'
-          Select-String -Path $mainPath -Pattern 'QString client = QString\(CLIENTNAME\);'
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          arch: win64_msvc2022_64
-          version: '6.11.1'
-          modules: 'qtmultimedia qtspeech'
-          setup-python: false
-          cache: true
-          cache-key-prefix: teamtalk-pro-release-qt
-          aqtsource: 'aqtinstall@git+https://github.com/miurahr/aqtinstall.git@master'
 
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
@@ -120,12 +101,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.workspace }}/install-toolchain
-          key: teamtalk-pro-release-toolchain-win64-${{ hashFiles('Build/**', 'Library/TeamTalkLib/**/CMakeLists.txt', 'CMakeLists.txt') }}
+          key: teamtalk-pro-native-toolchain-win64-${{ hashFiles('Build/**', 'Library/TeamTalkLib/**/CMakeLists.txt', 'CMakeLists.txt') }}
           restore-keys: |
+            teamtalk-pro-native-toolchain-win64-
             teamtalk-pro-release-toolchain-win64-
             teamtalk-toolchain-win64-
 
-      - name: Configure release build
+      - name: Configure native release build
         working-directory: ${{ runner.workspace }}
         shell: pwsh
         run: |
@@ -134,69 +116,82 @@ jobs:
             $externalProjects = "OFF"
           }
 
-          cmake -S "${{ github.workspace }}" -B output-pro-release -A x64 `
+          cmake -S "${{ github.workspace }}" -B output-pro-native-release -A x64 `
             -DBUILD_TEAMTALK_LIBRARIES=OFF `
             -DBUILD_TEAMTALK_SERVERS=OFF `
             -DBUILD_TEAMTALK_DOCUMENTATION=OFF `
+            -DBUILD_TEAMTALK_CLIENT_TEAMTALKAPP_DOTNET=OFF `
+            -DBUILD_TEAMTALK_CLIENT_PRISM=ON `
             -DFEATURE_WEBRTC=OFF `
             -DTOOLCHAIN_BUILD_EXTERNALPROJECTS=$externalProjects `
             -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain
 
-      - name: Build TeamTalk Pro client
+      - name: Build native TeamTalk Pro client and SDK DLL
         working-directory: ${{ runner.workspace }}
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          cmake --build output-pro-release --parallel --config Release --target TeamTalk5DLL
-          cmake --build output-pro-release --parallel --config Release --target TeamTalk5
-          cmake --build output-pro-release --parallel --config Release --target QtTeamTalk5-windeploy-release
+          cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5DLL
+          cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5Classic
 
-      - name: Create portable and installer source
+      - name: Verify release contains no Qt runtime
+        shell: pwsh
+        run: |
+          $exe = "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe"
+          $dll = "${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk5.dll"
+          if (-not (Test-Path $exe)) { throw "Native TeamTalk5.exe nao foi encontrado" }
+          if (-not (Test-Path $dll)) { throw "TeamTalk5.dll nao foi encontrada" }
+          Write-Host "Native executable: $exe"
+          Write-Host "SDK DLL: $dll"
+
+      - name: Create portable installer source and SDK
         shell: pwsh
         run: |
           $stage = "${{ runner.workspace }}\teamtalk-pro-$env:PRO_VERSION-portable-win64"
           $client = Join-Path $stage "Client"
           $installerSource = "${{ runner.workspace }}\teamtalk-pro-$env:PRO_VERSION-installer-source"
+          $sdkStage = "${{ runner.workspace }}\teamtalk-pro-$env:PRO_VERSION-sdk-win64"
           $assets = "${{ github.workspace }}\release-assets"
 
           Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item $installerSource -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $sdkStage -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item $assets -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $client | Out-Null
-          New-Item -ItemType Directory -Force -Path $assets | Out-Null
+          New-Item -ItemType Directory -Force -Path $client,$installerSource,$sdkStage,$assets | Out-Null
 
-          Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\TeamTalk5.exe" $client -Force
-
-          $dll = "${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk5.dll"
-          if (-not (Test-Path $dll)) {
-            throw "TeamTalk5.dll compilada nao foi encontrada em $dll"
-          }
-          Copy-Item $dll $client -Force
-
-          if (-not (Test-Path "${{ github.workspace }}\Client\qtTeamTalk\windeployqt")) {
-            throw "Pasta windeployqt nao foi criada"
-          }
-          Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\windeployqt\*" $client -Recurse -Force
-
-          $languages = Join-Path $client "languages"
-          New-Item -ItemType Directory -Force -Path $languages | Out-Null
-          Get-ChildItem "${{ github.workspace }}\Client\qtTeamTalk\languages" -Filter "*.qm" -ErrorAction SilentlyContinue |
-            Copy-Item -Destination $languages
-
-          Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini") -Force
-          Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini.default") -Force
+          Copy-Item "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" $client -Force
+          Copy-Item "${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk5.dll" $client -Force
+          Copy-Item "${{ github.workspace }}\Client\TeamTalkClassic\lng_classic" (Join-Path $client "lng_classic") -Recurse -Force
           Copy-Item "${{ github.workspace }}\Setup\Client\Sounds" (Join-Path $client "Sounds") -Recurse -Force
           Copy-Item "${{ github.workspace }}\Setup\Installer\Windows\License.txt" (Join-Path $stage "License.txt") -Force
 
-          New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
           Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
-          Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
+
+          $sdkInclude = Join-Path $sdkStage "include"
+          $sdkBin = Join-Path $sdkStage "bin"
+          $sdkLib = Join-Path $sdkStage "lib"
+          New-Item -ItemType Directory -Force -Path $sdkInclude,$sdkBin,$sdkLib | Out-Null
+          Get-ChildItem "${{ github.workspace }}\Library\TeamTalk_DLL" -Filter "*.h" | Copy-Item -Destination $sdkInclude
+          Copy-Item "${{ github.workspace }}\Library\TeamTalkLib\TeamTalkDefs.h" $sdkInclude -Force
+          Copy-Item "${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk5.dll" $sdkBin -Force
+          $importLib = Get-ChildItem "${{ github.workspace }}" -Filter "TeamTalk5.lib" -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch "\\test\\" } | Select-Object -First 1
+          if ($importLib) { Copy-Item $importLib.FullName $sdkLib -Force }
+          @(
+            "TeamTalk 5 Pro SDK $env:PRO_SDK_VERSION",
+            "Client release: $env:PRO_VERSION",
+            "Windows x64",
+            "Includes TeamTalk Pro microphone equalizer and secondary sound input APIs."
+          ) | Set-Content (Join-Path $sdkStage "README.txt") -Encoding utf8
 
           Compress-Archive -Path (Join-Path $stage "*") `
             -DestinationPath (Join-Path $assets "teamtalk-pro-$env:PRO_VERSION-portable-win64.zip") `
             -CompressionLevel Optimal -Force
+          Compress-Archive -Path (Join-Path $sdkStage "*") `
+            -DestinationPath (Join-Path $assets "teamtalk-pro-$env:PRO_VERSION-sdk-win64.zip") `
+            -CompressionLevel Optimal -Force
 
-      - name: Build versioned installer
+      - name: Build versioned native installer
         shell: pwsh
         run: |
           $installerSource = "${{ runner.workspace }}\teamtalk-pro-$env:PRO_VERSION-installer-source"
@@ -208,26 +203,20 @@ jobs:
             $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
             if ($cmd) { $iscc = $cmd.Source }
           }
-          if (-not (Test-Path $iscc)) {
-            throw "ISCC.exe do Inno Setup nao foi encontrado"
-          }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe nao foi encontrado" }
 
           & $iscc "-dClientDir=$installerSource" "-dProVersion=$env:PRO_VERSION" $iss
-          if ($LASTEXITCODE -ne 0) {
-            throw "Inno Setup falhou com codigo $LASTEXITCODE"
-          }
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup falhou com codigo $LASTEXITCODE" }
 
           $setupName = "TeamTalk_5_Pro_$env:PRO_VERSION`_Setup_x64.exe"
           $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\$setupName"
-          if (-not (Test-Path $builtSetup)) {
-            throw "Instalador nao encontrado: $builtSetup"
-          }
+          if (-not (Test-Path $builtSetup)) { throw "Instalador nao encontrado: $builtSetup" }
           Copy-Item $builtSetup (Join-Path $assets $setupName) -Force
 
       - name: Upload release build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: teamtalk-pro-${{ env.PRO_VERSION }}-release-assets
+          name: teamtalk-pro-${{ env.PRO_VERSION }}-native-release-assets
           path: release-assets/*
           if-no-files-found: error
 
@@ -235,17 +224,21 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pro-v${{ env.PRO_VERSION }}
-          name: TeamTalk 5 Pro ${{ env.PRO_VERSION }}
+          name: TeamTalk 5 Pro ${{ env.PRO_VERSION }} Native
           target_commitish: ${{ github.sha }}
           make_latest: true
           generate_release_notes: true
           body: |
             TeamTalk 5 Pro ${{ env.PRO_VERSION }} para Windows x64.
-            SDK TeamTalk: ${{ env.PRO_SDK_VERSION }}.
+            SDK TeamTalk Pro: ${{ env.PRO_SDK_VERSION }}.
 
-            Esta Release e a fonte oficial usada pelo atualizador automatico deste fork.
-            O instalador e o pacote portatil foram gerados automaticamente pelo GitHub Actions.
+            Esta versão migra o cliente Windows para uma interface nativa MFC/Win32 e não distribui Qt.
+            O instalador mantém o mesmo AppId e é detectado automaticamente pelas versões Qt anteriores do TeamTalk 5 Pro.
+            As configurações existentes são migradas na primeira inicialização.
+
+            Inclui o SDK atualizado com as APIs Pro de equalizador do microfone e entrada de áudio secundária.
           files: |
             release-assets/TeamTalk_5_Pro_${{ env.PRO_VERSION }}_Setup_x64.exe
             release-assets/teamtalk-pro-${{ env.PRO_VERSION }}-portable-win64.zip
+            release-assets/teamtalk-pro-${{ env.PRO_VERSION }}-sdk-win64.zip
           fail_on_unmatched_files: true
