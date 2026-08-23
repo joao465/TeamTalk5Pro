@@ -118,6 +118,14 @@ static Bool qt_keypress_scanner(Display *, XEvent *event, XPointer arg)
         return (! data->error);
     }
 
+    // must be XKeyRelease event
+    if (data->release)
+    {
+        // found a second release
+        data->error = true;
+        return false;
+    }
+
     // found a single release
     data->release = true;
     data->timestamp = event->xkey.time;
