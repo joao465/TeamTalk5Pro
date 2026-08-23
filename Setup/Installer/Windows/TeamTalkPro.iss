@@ -2,13 +2,15 @@
   #define ClientDir "C:\TeamTalkProClient"
 #endif
 
-#define ProVersion "5.26.2"
+#ifndef ProVersion
+  #define ProVersion "5.26.2"
+#endif
 
 [Setup]
 AppId={{D62C0218-F591-4729-AA56-3769F9D2F61A}
 AppName=TeamTalk 5 Pro
 AppVersion={#ProVersion}
-VersionInfoVersion=5.26.2.0
+VersionInfoVersion={#ProVersion}.0
 AppVerName=TeamTalk 5 (pro {#ProVersion})
 AppPublisher=TeamTalk 5 Pro
 DefaultDirName={autopf}\TeamTalk 5 Pro
@@ -16,7 +18,7 @@ DefaultGroupName=TeamTalk 5 Pro
 UninstallDisplayName=TeamTalk 5 (pro {#ProVersion})
 UninstallDisplayIcon={app}\TeamTalk5.exe
 AllowNoIcons=yes
-OutputBaseFilename=TeamTalk_5_Pro_5.26.2_Setup_x64
+OutputBaseFilename=TeamTalk_5_Pro_{#ProVersion}_Setup_x64
 SetupIconFile=..\..\..\Client\qtTeamTalk\images\teamtalk.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
