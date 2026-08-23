@@ -95,7 +95,6 @@ jobs:
               m = matches[0]
               p.write_text(data[:m.start()] + text + data[m.start():], encoding='utf-8', newline='\n')
           '''
-          helpers = '\n'.join(line[10:] if line.startswith('          ') else line for line in helpers.splitlines())
           p.write_text(s[:start] + helpers + s[end:], encoding='utf-8', newline='\n')
 
       - name: Prepare current source for patch
