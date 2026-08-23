@@ -35,7 +35,7 @@ jobs:
       shell: pwsh
       run: |
         if (-not (Select-String -Path "Library/TeamTalk_DLL/TeamTalk.h" -Pattern "TT_InitSecondarySoundInputDevice" -Quiet)) {
-          throw "Secondary microphone source is not applied; refusing to build."
+          throw "Secondary microphone source has not been applied yet; refusing to build."
         }
 
     - name: Install Qt
@@ -156,6 +156,8 @@ jobs:
         New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
         Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
 
+        # Instalado: usa %APPDATA%\TeamTalk 5 Pro\TeamTalk5Pro.ini
+        # Por isso o instalador nao inclui um INI local ao lado do EXE.
         Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
 
     - name: Build independent installer
@@ -180,6 +182,7 @@ jobs:
         }
 
         $defineArg = "-dClientDir=$installerSource"
+
         & $iscc $defineArg $iss
         if ($LASTEXITCODE -ne 0) {
           throw "Inno Setup falhou com codigo $LASTEXITCODE"
