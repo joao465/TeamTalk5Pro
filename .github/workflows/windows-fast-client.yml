@@ -90,7 +90,7 @@ jobs:
           $externalProjects = "OFF"
         }
 
-        cmake -S TeamTalk5 -B output-fast -A x64 `
+        cmake -S "${{ github.workspace }}" -B output-fast -A x64 `
           -DBUILD_TEAMTALK_LIBRARIES=OFF `
           -DBUILD_TEAMTALK_SERVERS=OFF `
           -DBUILD_TEAMTALK_DOCUMENTATION=OFF `
