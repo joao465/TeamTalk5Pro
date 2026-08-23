@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   client-x64:
-    if: github.event_name != 'pull_request' || github.head_ref == 'teamtalk-pro-mic-eq'
+    if: github.event_name != 'pull_request' || github.head_ref == 'teamtalk-pro-mic-eq' || github.head_ref == 'teamtalk-pro-build-trigger'
     runs-on: windows-latest
     permissions:
       contents: read
