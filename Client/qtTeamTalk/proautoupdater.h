@@ -1,5 +1,5 @@
 /*
- * TeamTalk 5 Pro automatic updater for the joao465/TeamTalk5 fork.
+ * TeamTalk 5 Pro automatic updater for the joao465/TeamTalk5Pro fork.
  *
  * This file is part of the Qt TeamTalk client and follows the same GPL
  * licensing terms as Client/qtTeamTalk.
@@ -62,7 +62,7 @@ public:
 
     void checkForUpdates(bool manualCheck = false)
     {
-        QNetworkRequest request(QUrl(QStringLiteral("https://api.github.com/repos/joao465/TeamTalk5/releases/latest")));
+        QNetworkRequest request(QUrl(QStringLiteral("https://api.github.com/repos/joao465/TeamTalk5Pro/releases/latest")));
         request.setRawHeader("Accept", "application/vnd.github+json");
         request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
         request.setRawHeader("User-Agent", "TeamTalk-5-Pro-Updater");
