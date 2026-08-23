@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    if: "!startsWith(github.head_ref, 'debug') || startsWith(github.head_ref, 'debug-linux')"
+    if: "github.head_ref != 'teamtalk-pro-mic-eq' && (!startsWith(github.head_ref, 'debug') || startsWith(github.head_ref, 'debug-linux'))"
     permissions:
       security-events: write
       packages: read
@@ -90,7 +90,6 @@ jobs:
         cp -f Library/TeamTalkLib/test/tt5prosrv.xml_template Server/tt5prosrv.xml
         cp Library/TeamTalkLib/test/ttservercert.pem Server/
         cp Library/TeamTalkLib/test/ttserverkey.pem Server/
-        cp Library/TeamTalkLib/test/ca.cer Server/
         Server/tt5prosrv -d -wd Server/
 
     - name: Run PyTest

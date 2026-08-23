@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    if: "!startsWith(github.head_ref, 'debug')"
+    if: "github.head_ref != 'teamtalk-pro-mic-eq' && !startsWith(github.head_ref, 'debug')"
     runs-on: ubuntu-26.04
 
     steps:

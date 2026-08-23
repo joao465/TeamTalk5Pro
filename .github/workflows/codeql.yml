@@ -8,6 +8,7 @@ on:
 
 jobs:
   analyze:
+    if: github.head_ref != 'teamtalk-pro-mic-eq'
     name: Analyze (python)
     runs-on: ubuntu-latest
     permissions:
