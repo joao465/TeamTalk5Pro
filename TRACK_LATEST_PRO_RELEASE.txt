@@ -1,0 +1,1 @@
+Capture the latest TeamTalk Pro release workflow run so its run_id and URL can be tracked.
