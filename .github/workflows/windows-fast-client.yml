@@ -31,12 +31,45 @@ jobs:
       with:
         submodules: true
 
-    - name: Require secondary microphone source
+    - name: Preflight secondary microphone source
       shell: pwsh
       run: |
-        if (-not (Select-String -Path "Library/TeamTalk_DLL/TeamTalk.h" -Pattern "TT_InitSecondarySoundInputDevice" -Quiet)) {
-          throw "Secondary microphone source has not been applied yet; refusing to build."
+        $checks = @(
+          @{ Path = "Library/TeamTalk_DLL/TeamTalk.h"; Pattern = "TT_InitSecondarySoundInputDevice" },
+          @{ Path = "Library/TeamTalk_DLL/TeamTalk.h"; Pattern = "TT_CloseSecondarySoundInputDevice" },
+          @{ Path = "Library/TeamTalkLib/bin/dll/TeamTalk.cpp"; Pattern = "TT_InitSecondarySoundInputDevice" },
+          @{ Path = "Library/TeamTalkLib/teamtalk/client/ClientNode.h"; Pattern = "m_secondary_capture" },
+          @{ Path = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"; Pattern = "ClientNode::InitSecondarySoundInputDevice" },
+          @{ Path = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"; Pattern = "MixSecondaryAudio(audframe)" },
+          @{ Path = "Client/qtTeamTalk/preferences.ui"; Pattern = "secondaryInputDevBox" },
+          @{ Path = "Client/qtTeamTalk/preferences.ui"; Pattern = "secondaryMicListenButton" }
+        )
+        foreach ($check in $checks) {
+          if (-not (Test-Path $check.Path)) {
+            throw "Required secondary microphone file missing: $($check.Path)"
+          }
+          if (-not (Select-String -Path $check.Path -SimpleMatch -Pattern $check.Pattern -Quiet)) {
+            throw "Secondary microphone source incomplete: $($check.Pattern) missing from $($check.Path)"
+          }
         }
+        $cpp = Get-Content "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp" -Raw
+        foreach ($definition in @(
+          "bool ClientNode::InitSecondarySoundInputDevice(",
+          "void ClientNode::MixSecondaryAudio(",
+          "void ClientNode::StreamSecondaryCaptureCb("
+        )) {
+          $count = ([regex]::Matches($cpp, [regex]::Escape($definition))).Count
+          if ($count -ne 1) {
+            throw "Unexpected definition count for $definition : $count"
+          }
+        }
+        try {
+          [xml](Get-Content "Client/qtTeamTalk/preferences.ui" -Raw) | Out-Null
+        }
+        catch {
+          throw "preferences.ui is not valid XML: $($_.Exception.Message)"
+        }
+        Write-Host "Secondary microphone preflight passed for source commit $env:GITHUB_SHA"
 
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
@@ -155,7 +188,6 @@ jobs:
 
         New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
         Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
-
         Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
 
     - name: Build independent installer
@@ -180,7 +212,6 @@ jobs:
         }
 
         $defineArg = "-dClientDir=$installerSource"
-
         & $iscc $defineArg $iss
         if ($LASTEXITCODE -ne 0) {
           throw "Inno Setup falhou com codigo $LASTEXITCODE"
@@ -193,7 +224,6 @@ jobs:
 
         $setup = Join-Path $installerOut "TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
         Copy-Item $builtSetup $setup -Force
-
         if (-not (Test-Path $setup)) {
           throw "Falha ao copiar o instalador final para a pasta do artifact"
         }
