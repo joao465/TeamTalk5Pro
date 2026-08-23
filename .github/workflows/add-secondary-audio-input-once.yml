@@ -27,6 +27,12 @@ jobs:
           $yaml = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($blob.content -replace '\s','')))
           if ($yaml -notmatch 'PATCH_B64:\s*([A-Za-z0-9+/=]+)') { throw "PATCH_B64 not found" }
           $env:PATCH_B64 = $Matches[1]
+
+          $headerPath = "Library/TeamTalk_DLL/TeamTalk.h"
+          $header = Get-Content $headerPath -Raw
+          $header = $header.Replace((' ' * 51) + 'IN INT32 nInputDeviceID);', (' ' * 41) + 'IN INT32 nInputDeviceID);')
+          [IO.File]::WriteAllText((Resolve-Path $headerPath), $header, [Text.UTF8Encoding]::new($false))
+
           python -c "import os,base64,gzip; exec(gzip.decompress(base64.b64decode(os.environ['PATCH_B64'])))"
 
       - name: Commit secondary audio input
