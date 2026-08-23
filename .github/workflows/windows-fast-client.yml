@@ -31,6 +31,13 @@ jobs:
       with:
         submodules: true
 
+    - name: Require secondary microphone source
+      shell: pwsh
+      run: |
+        if (-not (Select-String -Path "Library/TeamTalk_DLL/TeamTalk.h" -Pattern "TT_InitSecondarySoundInputDevice" -Quiet)) {
+          throw "Secondary microphone source is not applied; refusing to build."
+        }
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
@@ -149,8 +156,6 @@ jobs:
         New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
         Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
 
-        # Instalado: usa %APPDATA%\TeamTalk 5 Pro\TeamTalk5Pro.ini
-        # Por isso o instalador nao inclui um INI local ao lado do EXE.
         Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
 
     - name: Build independent installer
@@ -174,11 +179,7 @@ jobs:
           throw "ISCC.exe do Inno Setup nao foi encontrado"
         }
 
-        # Deixa o Inno Setup usar a pasta Output padrao.
-        # Depois copiamos o EXE pronto para a pasta do artifact.
-        # Isso evita o erro de caminho D:\D:\... no runner.
         $defineArg = "-dClientDir=$installerSource"
-
         & $iscc $defineArg $iss
         if ($LASTEXITCODE -ne 0) {
           throw "Inno Setup falhou com codigo $LASTEXITCODE"
