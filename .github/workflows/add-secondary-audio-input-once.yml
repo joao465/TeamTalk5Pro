@@ -33,7 +33,24 @@ jobs:
           $header = $header.Replace((' ' * 51) + 'IN INT32 nInputDeviceID);', (' ' * 41) + 'IN INT32 nInputDeviceID);')
           [IO.File]::WriteAllText((Resolve-Path $headerPath), $header, [Text.UTF8Encoding]::new($false))
 
+          $clientPath = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"
+          $client = Get-Content $clientPath -Raw
+          $eol = if ($client.Contains("`r`n")) { "`r`n" } else { "`n" }
+          $currentBlock = "        CloseVideoCapture();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group${eol}        CloseSoundInputDevice();"
+          $patchBlock = "        CloseVideoCapture();${eol}        CloseSoundInputDevice();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group"
+          if (-not $client.Contains($currentBlock)) { throw "Current ClientNode destructor block not found" }
+          $client = $client.Replace($currentBlock, $patchBlock)
+          [IO.File]::WriteAllText((Resolve-Path $clientPath), $client, [Text.UTF8Encoding]::new($false))
+
           python -c "import os,base64,gzip; exec(gzip.decompress(base64.b64decode(os.environ['PATCH_B64'])))"
+
+          $client = Get-Content $clientPath -Raw
+          $eol = if ($client.Contains("`r`n")) { "`r`n" } else { "`n" }
+          $patchedBlock = "        CloseVideoCapture();${eol}        CloseSecondarySoundInputDevice();${eol}        CloseSoundInputDevice();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group"
+          $finalBlock = "        CloseVideoCapture();${eol}        CloseSecondarySoundInputDevice();${eol}        m_mediaplayback_streams.clear(); //clear all players before removing sound group${eol}        CloseSoundInputDevice();"
+          if (-not $client.Contains($patchedBlock)) { throw "Patched ClientNode destructor block not found" }
+          $client = $client.Replace($patchedBlock, $finalBlock)
+          [IO.File]::WriteAllText((Resolve-Path $clientPath), $client, [Text.UTF8Encoding]::new($false))
 
       - name: Commit secondary audio input
         shell: pwsh
