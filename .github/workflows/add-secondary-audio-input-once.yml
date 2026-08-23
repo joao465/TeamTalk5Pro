@@ -1,8 +1,8 @@
 name: Add Secondary Audio Input Once
 
 on:
-  push:
-    branches: [ "teamtalk-pro-mic-eq" ]
+  pull_request:
+    branches: [ "master" ]
     paths:
       - ".github/workflows/add-secondary-audio-input-once.yml"
 
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   patch-secondary-audio:
+    if: github.head_ref == 'teamtalk-pro-mic-eq'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,5 +44,3 @@ jobs:
                   .github/workflows/add-secondary-audio-input-once.yml
           git commit -m "Add secondary microphone input and monitor"
           git push origin teamtalk-pro-mic-eq
-
-# retrigger
