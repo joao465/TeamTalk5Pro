@@ -42,7 +42,8 @@ jobs:
           $client = $client.Replace($currentBlock, $patchBlock)
           [IO.File]::WriteAllText((Resolve-Path $clientPath), $client, [Text.UTF8Encoding]::new($false))
 
-          python -c "import os,base64,gzip; exec(gzip.decompress(base64.b64decode(os.environ['PATCH_B64'])))"
+          python -c "import os,base64,gzip; s=gzip.decompress(base64.b64decode(os.environ['PATCH_B64'])).decode('utf-8'); s=s.replace('raise SystemExit(f\"{path}: expected one match, found {count}\")','raise SystemExit(f\"{path}: expected one match, found {count}; target={old[:120]!r}\")'); s=s.replace('raise SystemExit(f\"{path}: expected one marker, found {count}\")','raise SystemExit(f\"{path}: expected one marker, found {count}; marker={marker[:120]!r}\")'); exec(s)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $client = Get-Content $clientPath -Raw
           $eol = if ($client.Contains("`r`n")) { "`r`n" } else { "`n" }
