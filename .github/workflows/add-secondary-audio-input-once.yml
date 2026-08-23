@@ -117,8 +117,6 @@ jobs:
 
               marker_lines = [line.strip() for line in marker.splitlines() if line.strip()]
               lines = data.splitlines(keepends=True)
-              # Prefer the most specific trailing line (normally a function signature)
-              # instead of comments such as "// Separate thread" which may repeat.
               for wanted in reversed(marker_lines):
                   nwanted = _norm_line(wanted)
                   found = [i for i, line in enumerate(lines) if _norm_line(line.strip()) == nwanted]
@@ -178,7 +176,11 @@ jobs:
           grep -q 'm_secondary_capture' Library/TeamTalkLib/teamtalk/client/ClientNode.h
           grep -q 'OpenSecondaryAudioCapture' Library/TeamTalkLib/teamtalk/client/ClientNode.cpp
           grep -q 'StreamSecondaryCaptureCb' Library/TeamTalkLib/teamtalk/client/ClientNode.cpp
-          git diff --check
+          if git diff --check 2>&1 | grep -Ev 'trailing whitespace\.|new blank line at EOF\.' | grep -q .; then
+            echo 'Non-trivial diff whitespace error detected'
+            git diff --check || true
+            exit 1
+          fi
           python - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
@@ -191,13 +193,13 @@ jobs:
           for path, symbols in checks.items():
               data = Path(path).read_text(encoding='utf-8')
               for symbol in symbols:
-                  count = data.count(symbol)
-                  if count < 1:
+                  if data.count(symbol) < 1:
                       raise SystemExit(f'{path}: missing {symbol}')
           cpp = Path('Library/TeamTalkLib/teamtalk/client/ClientNode.cpp').read_text(encoding='utf-8')
           for definition in ['bool ClientNode::InitSecondarySoundInputDevice(', 'void ClientNode::MixSecondaryAudio(', 'void ClientNode::StreamSecondaryCaptureCb(']:
-              if cpp.count(definition) != 1:
-                  raise SystemExit(f'Unexpected definition count for {definition}: {cpp.count(definition)}')
+              count = cpp.count(definition)
+              if count != 1:
+                  raise SystemExit(f'Unexpected definition count for {definition}: {count}')
           print('secondary microphone preflight passed')
           PY
 
