@@ -33,9 +33,17 @@ jobs:
           pathlib.Path('/tmp/secondary_patch.py').write_bytes(gzip.decompress(base64.b64decode(m.group(1))))
           PY
 
-      - name: Show original patch script
+      - name: Save decoded patch script to branch
         shell: bash
-        run: sed -n '1,320p' /tmp/secondary_patch.py
+        run: |
+          cp /tmp/secondary_patch.py .github/secondary_patch_debug.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/secondary_patch_debug.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Expose decoded secondary microphone patch"
+            git push origin teamtalk-pro-mic-eq
+          fi
 
       - name: Prepare current source for patch
         shell: python
@@ -76,6 +84,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/add-secondary-audio-input-once.yml
+          git rm -f .github/secondary_patch_debug.py || true
           git add Client/qtTeamTalk/settings.h Client/qtTeamTalk/utilsound.h Client/qtTeamTalk/utilsound.cpp Client/qtTeamTalk/preferences.ui Client/qtTeamTalk/preferencesdlg.h Client/qtTeamTalk/preferencesdlg.cpp Library/TeamTalk_DLL/TeamTalk.h Library/TeamTalkLib/bin/dll/TeamTalk.cpp Library/TeamTalkLib/teamtalk/client/ClientNode.h Library/TeamTalkLib/teamtalk/client/ClientNode.cpp
           git commit -m "Add secondary microphone input and monitor"
           git push origin teamtalk-pro-mic-eq
