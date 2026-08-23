@@ -1,10 +1,39 @@
 name: Add Secondary Audio Input Once
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ "teamtalk-pro-mic-eq" ]
+    paths:
+      - ".github/workflows/add-secondary-audio-input-once.yml"
+
+permissions:
+  contents: write
 
 jobs:
-  placeholder:
-    runs-on: ubuntu-latest
+  patch-secondary-audio:
+    runs-on: windows-latest
     steps:
-      - run: echo "Secondary microphone patch will be applied directly."
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: teamtalk-pro-mic-eq
+
+      - name: Apply original secondary microphone patch
+        shell: pwsh
+        run: |
+          $headers = @{ Accept = "application/vnd.github+json"; "User-Agent" = "TeamTalk5-Actions" }
+          $blob = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/joao465/TeamTalk5/git/blobs/3eff5a145e1435fee75f5a32329e9a2980392d1d"
+          $yaml = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($blob.content -replace '\s','')))
+          if ($yaml -notmatch 'PATCH_B64:\s*([A-Za-z0-9+/=]+)') { throw "PATCH_B64 not found" }
+          $env:PATCH_B64 = $Matches[1]
+          python -c "import os,base64,gzip; exec(gzip.decompress(base64.b64decode(os.environ['PATCH_B64'])))"
+
+      - name: Commit secondary audio input
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/add-secondary-audio-input-once.yml
+          git add Client/qtTeamTalk/settings.h Client/qtTeamTalk/utilsound.h Client/qtTeamTalk/utilsound.cpp Client/qtTeamTalk/preferences.ui Client/qtTeamTalk/preferencesdlg.h Client/qtTeamTalk/preferencesdlg.cpp Library/TeamTalk_DLL/TeamTalk.h Library/TeamTalkLib/bin/dll/TeamTalk.cpp Library/TeamTalkLib/teamtalk/client/ClientNode.h Library/TeamTalkLib/teamtalk/client/ClientNode.cpp
+          git commit -m "Add secondary microphone input and monitor"
+          git push origin teamtalk-pro-mic-eq
