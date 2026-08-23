@@ -1,0 +1,121 @@
+name: Windows Native Client
+
+on:
+  push:
+    branches:
+      - teamtalk-pro-mic-eq
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-client:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Stamp validation version
+        shell: pwsh
+        run: |
+          $appPath = "Client/TeamTalkClassic/AppInfo.h"
+          $app = Get-Content $appPath -Raw
+          $app = [regex]::Replace($app, '#define APPVERSION_SHORT\s+_T\("[^"]+"\)', '#define APPVERSION_SHORT        _T("5.26.5")')
+          Set-Content $appPath $app -Encoding utf8NoBOM
+
+          $sdkPath = "Library/TeamTalk_DLL/TeamTalk.h"
+          $sdk = Get-Content $sdkPath -Raw
+          $sdk = [regex]::Replace($sdk, '#define TEAMTALK_VERSION\s+"[^"]+"', '#define TEAMTALK_VERSION "5.26.5.5205"')
+          Set-Content $sdkPath $sdk -Encoding utf8NoBOM
+
+          $defsPath = "Library/TeamTalkLib/TeamTalkDefs.h"
+          $defs = Get-Content $defsPath -Raw
+          $defs = [regex]::Replace($defs, '#define TEAMTALK_VERSION\s+"[^"]+"', '#define TEAMTALK_VERSION            "5.26.5.5205"')
+          $defs = [regex]::Replace($defs, '#define TEAMTALK_RC_VERSION\s+[^\r\n]+', '#define TEAMTALK_RC_VERSION         5,26,5,5205')
+          $defs = [regex]::Replace($defs, '#define TEAMTALK_RC_FILEVERSION\s+"[^"]+"', '#define TEAMTALK_RC_FILEVERSION     "5, 26, 5, 5205"')
+          Set-Content $defsPath $defs -Encoding utf8NoBOM
+
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          path-type: inherit
+          update: true
+          install: base-devel
+          release: false
+
+      - name: Install NASM
+        working-directory: ${{ runner.workspace }}
+        shell: cmd
+        run: |
+          curl -L -o nasm.zip https://www.nasm.us/pub/nasm/releasebuilds/3.01/win64/nasm-3.01-win64.zip
+          7z x nasm.zip
+          echo %CD%\nasm-3.01>> %GITHUB_PATH%
+
+      - name: Cache TeamTalk toolchain
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.workspace }}/install-toolchain
+          key: teamtalk-pro-native-toolchain-win64-${{ hashFiles('Build/**', 'Library/TeamTalkLib/**/CMakeLists.txt', 'CMakeLists.txt') }}
+          restore-keys: |
+            teamtalk-pro-native-toolchain-win64-
+            teamtalk-pro-release-toolchain-win64-
+            teamtalk-toolchain-win64-
+
+      - name: Configure native client
+        working-directory: ${{ runner.workspace }}
+        shell: pwsh
+        run: |
+          $externalProjects = "ON"
+          if ("${{ steps.toolchain-cache.outputs.cache-hit }}" -eq "true") { $externalProjects = "OFF" }
+          cmake -S "${{ github.workspace }}" -B output-native-test -A x64 `
+            -DBUILD_TEAMTALK_LIBRARIES=OFF `
+            -DBUILD_TEAMTALK_SERVERS=OFF `
+            -DBUILD_TEAMTALK_DOCUMENTATION=OFF `
+            -DBUILD_TEAMTALK_CLIENT_TEAMTALKAPP_DOTNET=OFF `
+            -DBUILD_TEAMTALK_CLIENT_PRISM=ON `
+            -DFEATURE_WEBRTC=OFF `
+            -DTOOLCHAIN_BUILD_EXTERNALPROJECTS=$externalProjects `
+            -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain
+
+      - name: Build and verify native client
+        working-directory: ${{ runner.workspace }}
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake --build output-native-test --parallel --config Release --target TeamTalk5DLL
+          if errorlevel 1 exit /b 1
+          cmake --build output-native-test --parallel --config Release --target TeamTalk5Classic
+          if errorlevel 1 exit /b 1
+          if not exist "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" exit /b 1
+          dumpbin /DEPENDENTS "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" > native-dependencies.txt
+          findstr /I "Qt5 Qt6 QtCore QtGui QtWidgets" native-dependencies.txt >nul
+          if not errorlevel 1 (
+            echo ERROR: Qt dependency found in native TeamTalk5.exe
+            type native-dependencies.txt
+            exit /b 1
+          )
+          type native-dependencies.txt
+          exit /b 0
+
+      - name: Stage native artifact
+        shell: pwsh
+        run: |
+          $stage = "${{ runner.workspace }}\teamtalk-pro-native-5.26.5"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" $stage -Force
+          Copy-Item "${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk5.dll" $stage -Force
+          Copy-Item "${{ github.workspace }}\Client\TeamTalkClassic\lng_classic" (Join-Path $stage "lng_classic") -Recurse -Force
+          Copy-Item "${{ github.workspace }}\Setup\Client\Sounds" (Join-Path $stage "Sounds") -Recurse -Force
+
+      - name: Upload native validation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: teamtalk-pro-native-5.26.5-win64
+          path: ${{ runner.workspace }}/teamtalk-pro-native-5.26.5
+          if-no-files-found: error
