@@ -243,6 +243,26 @@ int getSelectedSndInputDevice()
     return inputid;
 }
 
+int getSelectedSecondarySndInputDevice()
+{
+    int inputid = ttSettings->value(SETTINGS_SOUND_SECONDARY_INPUTDEVICE,
+                          SETTINGS_SOUND_SECONDARY_INPUTDEVICE_DEFAULT).toInt();
+    if (inputid == TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL)
+        return inputid;
+
+    qDebug() << "Secondary input device in settings #" << inputid;
+    if (inputid == SOUNDDEVICEID_DEFAULT)
+        inputid = getDefaultSndInputDevice();
+    else
+    {
+        QString uid = ttSettings->value(SETTINGS_SOUND_SECONDARY_INPUTDEVICE_UID, "").toString();
+        if (uid.size())
+  inputid = getSoundInputFromUID(inputid, uid);
+    }
+    qDebug() << "Returning secondary input device #" << inputid;
+    return inputid;
+}
+
 int getSelectedSndOutputDevice()
 {
     int outputid = ttSettings->value(SETTINGS_SOUND_OUTPUTDEVICE, SOUNDDEVICEID_DEFAULT).toInt();
@@ -297,6 +317,7 @@ QStringList initSoundDevices(const SoundDevice& indev, const SoundDevice& outdev
     AudioPreprocessor preprocess = {};
     TT_GetSoundInputPreprocessEx(ttInst, &preprocess);
 
+    TT_CloseSecondarySoundInputDevice(ttInst);
     TT_CloseSoundInputDevice(ttInst);
     TT_CloseSoundOutputDevice(ttInst);
     TT_CloseSoundDuplexDevices(ttInst);
@@ -355,19 +376,41 @@ QStringList initSoundDevices(const SoundDevice& indev, const SoundDevice& outdev
 QStringList initSelectedSoundDevices(SoundDevice& indev, SoundDevice& outdev)
 {
     int inputid = getSelectedSndInputDevice();
+    int secondaryinputid = getSelectedSecondarySndInputDevice();
     int outputid = getSelectedSndOutputDevice();
 
     QVector<SoundDevice> devs = getSoundDevices();
     getSoundDevice(inputid, devs, indev);
     getSoundDevice(outputid, devs, outdev);
 
-    return initSoundDevices(indev, outdev);
+    QStringList result = initSoundDevices(indev, outdev);
+
+    if (secondaryinputid != TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL)
+    {
+        SoundDevice secondarydev = {};
+        if (!getSoundDevice(secondaryinputid, devs, secondarydev))
+        {
+  result.append(QObject::tr("Failed to find secondary sound input device"));
+        }
+        else if (secondarydev.nDeviceID == indev.nDeviceID)
+        {
+  result.append(QObject::tr("Secondary sound input device must be different from the primary input device"));
+        }
+        else if (!TT_InitSecondarySoundInputDevice(ttInst, secondarydev.nDeviceID))
+        {
+  result.append(QObject::tr("Failed to initialize secondary sound input device: %1")
+                    .arg(_Q(secondarydev.szDeviceName)));
+        }
+    }
+
+    return result;
 }
 
 QStringList initDefaultSoundDevices(SoundDevice& indev, SoundDevice& outdev)
 {
     QStringList result;
 
+    TT_CloseSecondarySoundInputDevice(ttInst);
     TT_CloseSoundInputDevice(ttInst);
     TT_CloseSoundOutputDevice(ttInst);
     TT_CloseSoundDuplexDevices(ttInst);

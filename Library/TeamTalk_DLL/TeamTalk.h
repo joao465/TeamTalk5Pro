@@ -4455,8 +4455,21 @@ extern "C" {
      * @see TT_GetSoundDevices
      * @see TT_CloseSoundInputDevice
      * @see TT_GetSoundInputLevel */
-    TEAMTALKDLL_API TTBOOL TT_InitSoundInputDevice(IN TTInstance* lpTTInstance, 
-                                                   IN INT32 nInputDeviceID);
+        TEAMTALKDLL_API TTBOOL TT_InitSoundInputDevice(IN TTInstance* lpTTInstance, 
+                                         IN INT32 nInputDeviceID);
+
+    /**
+     * @brief Initialize an optional secondary sound input device.
+     *
+     * Audio from this device is mixed with the primary microphone before
+     * voice encoding. The TeamTalk Pro microphone equalizer is applied only
+     * to the primary input and never to this secondary input.
+     */
+    TEAMTALKDLL_API TTBOOL TT_InitSecondarySoundInputDevice(IN TTInstance* lpTTInstance,
+                                                  IN INT32 nInputDeviceID);
+
+    /** @brief Close the optional secondary sound input device. */
+    TEAMTALKDLL_API TTBOOL TT_CloseSecondarySoundInputDevice(IN TTInstance* lpTTInstance);
 
     /**
      * @brief Setup sample rate, channels and frame size of shared

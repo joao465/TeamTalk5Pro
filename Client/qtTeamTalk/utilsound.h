@@ -43,6 +43,7 @@ int getSoundInputFromUID(int inputid, const QString& uid);
 int getSoundOutputFromUID(int outputid, const QString& uid);
 
 int getSelectedSndInputDevice();
+int getSelectedSecondarySndInputDevice();
 int getSelectedSndOutputDevice();
 
 #if defined(QT_MULTIMEDIA_LIB) && QT_VERSION >= QT_VERSION_CHECK(6,0,0)

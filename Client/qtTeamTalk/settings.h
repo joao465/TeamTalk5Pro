@@ -243,6 +243,9 @@
 #define SETTINGS_SOUND_INPUTDEVICE                  "soundsystem/inputdeviceid"
 #define SETTINGS_SOUND_INPUTDEVICE_DEFAULT          SOUNDDEVICEID_DEFAULT
 #define SETTINGS_SOUND_INPUTDEVICE_UID              "soundsystem/inputdeviceuid"
+#define SETTINGS_SOUND_SECONDARY_INPUTDEVICE        "soundsystem/secondary-inputdeviceid"
+#define SETTINGS_SOUND_SECONDARY_INPUTDEVICE_DEFAULT TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL
+#define SETTINGS_SOUND_SECONDARY_INPUTDEVICE_UID    "soundsystem/secondary-inputdeviceuid"
 #define SETTINGS_SOUND_OUTPUTDEVICE                 "soundsystem/outputdeviceid"
 #define SETTINGS_SOUND_OUTPUTDEVICE_DEFAULT         SOUNDDEVICEID_DEFAULT
 #define SETTINGS_SOUND_OUTPUTDEVICE_UID             "soundsystem/outputdeviceuid"

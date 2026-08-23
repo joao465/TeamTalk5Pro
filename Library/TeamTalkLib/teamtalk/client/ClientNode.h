@@ -62,8 +62,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <vector>
 
@@ -180,6 +182,8 @@ namespace teamtalk {
         , public FileTransferListener
     {
     public:
+        struct SecondarySoundCapture;
+
         ClientNode(const ACE_TString& version, ClientListener* listener);
         ~ClientNode() override;
 
@@ -211,6 +215,8 @@ namespace teamtalk {
 
         //SoundSystem
         bool InitSoundInputDevice(int inputdeviceid);
+        bool InitSecondarySoundInputDevice(int inputdeviceid);
+        bool CloseSecondarySoundInputDevice();
         bool InitSoundOutputDevice(int outputdeviceid);
         bool InitSoundDuplexDevices(int inputdeviceid, int outputdeviceid);
         bool CloseSoundInputDevice();
@@ -501,6 +507,11 @@ namespace teamtalk {
         //audio start/stop/update
         void OpenAudioCapture(const AudioCodec& codec);
         void CloseAudioCapture();
+        bool OpenSecondaryAudioCapture(const AudioCodec& codec);
+        void CloseSecondaryAudioCapture();
+        void StreamSecondaryCaptureCb(const soundsystem::InputStreamer& streamer,
+                            const short* buffer, int n_samples);
+        void MixSecondaryAudio(media::AudioFrame& audframe);
         void QueueAudioCapture(media::AudioFrame& audframe);
         void QueueVoiceFrame(media::AudioFrame& audframe,
                              ACE_Message_Block* mb_audio = nullptr);
@@ -531,6 +542,11 @@ namespace teamtalk {
         ACE_Recursive_Thread_Mutex m_sndgrp_lock;
         SoundProperties m_soundprop;
         std::unique_ptr<SoundInputEqualizerState> m_soundinput_equalizer;
+        std::unique_ptr<SecondarySoundCapture> m_secondary_capture;
+        int m_secondary_inputdeviceid = SOUNDDEVICE_IGNORE_ID;
+        bool m_secondary_capture_open = false;
+        std::deque<short> m_secondary_mix_queue;
+        std::mutex m_secondary_mix_mutex;
         //log voice to files
         voicelogger_t m_voicelogger;
         // audio container for getting raw audio from users
@@ -577,6 +593,8 @@ namespace teamtalk {
         //audio resampler for capture
         audio_resampler_t m_capture_resampler;
         std::vector<short> m_capture_buffer;
+        audio_resampler_t m_secondary_capture_resampler;
+        std::vector<short> m_secondary_capture_buffer;
         //audio resampler for playback (in duplex mode)
         audio_resampler_t m_playback_resampler;
         std::vector<short> m_playback_buffer;

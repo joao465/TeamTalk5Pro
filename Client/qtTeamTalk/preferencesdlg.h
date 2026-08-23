@@ -87,10 +87,13 @@ private:
     void slotSoundOutputChange(int index);
     void slotSoundRestart();
     void slotSoundTestDevices(bool checked);
+    void slotSecondaryMicListen(bool checked);
+    void restoreSecondarySoundInput();
     void slotSoundDefaults();
     void slotUpdateSoundCheckBoxes();
     SoundDevice& m_devin, &m_devout;
     TTSoundLoop* m_sndloop;
+    TTSoundLoop* m_secondaryloop;
 
     //sound events
     void initSoundEventsTab();

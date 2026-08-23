@@ -248,6 +248,27 @@ struct SoundInputEqualizerState
 };
 }
 
+struct ClientNode::SecondarySoundCapture : public soundsystem::StreamCapture
+{
+    explicit SecondarySoundCapture(ClientNode* owner)
+        : owner(owner)
+    {
+    }
+
+    void StreamCaptureCb(const soundsystem::InputStreamer& streamer,
+               const short* buffer, int samples) override
+    {
+        owner->StreamSecondaryCaptureCb(streamer, buffer, samples);
+    }
+
+    soundsystem::SoundDeviceFeatures GetCaptureFeatures() override
+    {
+        return soundsystem::SOUNDDEVICEFEATURE_NONE;
+    }
+
+    ClientNode* owner;
+};
+
 ClientNode::ClientNode(const ACE_TString& version, ClientListener* listener)
                        : m_flags(CLIENT_CLOSED)
                        , m_connector(GetEventLoop(), ACE_NONBLOCK)
@@ -262,7 +283,9 @@ ClientNode::ClientNode(const ACE_TString& version, ClientListener* listener)
 
     m_listener->RegisterEventSuspender(this);
 
-    m_soundsystem = soundsystem::GetInstance();
+        m_soundsystem = soundsystem::GetInstance();
+    m_secondary_capture = std::make_unique<SecondarySoundCapture>(this);
+
     m_soundprop.soundgroupid = m_soundsystem->OpenSoundGroup();
 
     m_local_voicelog = std::make_shared<ClientUser>(LOCAL_USERID, this,
@@ -281,6 +304,7 @@ ClientNode::~ClientNode()
         StopStreamingMediaFile();
         StopRecordingMuxedAudioFile();
         CloseVideoCapture();
+        CloseSecondarySoundInputDevice();
         m_mediaplayback_streams.clear(); //clear all players before removing sound group
         CloseSoundInputDevice();
         CloseSoundOutputDevice();
@@ -1160,17 +1184,23 @@ void ClientNode::OpenAudioCapture(const AudioCodec& codec)
                                                 input_samples);
     }
 
-    if (!opened)
+        if (!opened)
     {
         if (m_listener != nullptr)
-            m_listener->OnInternalError(TT_INTERR_SNDINPUT_FAILURE,
-                                        GetErrorDescription(TT_INTERR_SNDINPUT_FAILURE));
+  m_listener->OnInternalError(TT_INTERR_SNDINPUT_FAILURE,
+                              GetErrorDescription(TT_INTERR_SNDINPUT_FAILURE));
+    }
+    else if (m_secondary_inputdeviceid != SOUNDDEVICE_IGNORE_ID)
+    {
+        OpenSecondaryAudioCapture(codec);
     }
 }
 
 void ClientNode::CloseAudioCapture()
 {
     ASSERT_CLIENTNODE_LOCKED(this);
+
+    CloseSecondaryAudioCapture();
 
     if((m_flags & CLIENT_SNDINOUTPUT_DUPLEX) != 0u)
         m_soundsystem->CloseDuplexStream(this);
@@ -1211,6 +1241,10 @@ void ClientNode::QueueAudioCapture(media::AudioFrame& audframe)
 {
     if (m_soundinput_equalizer)
         m_soundinput_equalizer->Process(audframe);
+
+    // Mix after the Pro EQ so the secondary microphone/line input
+    // always bypasses the microphone equalizer.
+    MixSecondaryAudio(audframe);
 
     bool const ptt_close = m_voice_tx_closed.exchange(false);
     audframe.force_enc = (((m_flags & CLIENT_TX_VOICE) != 0u) || ptt_close);
@@ -1425,6 +1459,147 @@ void ClientNode::EncodedAudioFileFrame(const teamtalk::AudioCodec& codec,
 }
 
 
+bool ClientNode::OpenSecondaryAudioCapture(const AudioCodec& codec)
+{
+    ASSERT_CLIENTNODE_LOCKED(this);
+
+    if (!m_secondary_capture ||
+        m_secondary_inputdeviceid == SOUNDDEVICE_IGNORE_ID)
+        return true;
+
+    if (m_secondary_capture_open)
+        CloseSecondaryAudioCapture();
+
+    int const codec_samplerate = GetAudioCodecSampleRate(codec);
+    int const codec_samples = GetAudioCodecCbSamples(codec);
+    int const codec_channels = GetAudioCodecChannels(codec);
+
+    if (codec_samples <= 0 || codec_samplerate <= 0 || codec_channels == 0)
+        return false;
+
+    int input_samplerate = codec_samplerate;
+    int input_channels = codec_channels;
+    int input_samples = codec_samples;
+
+    if (!m_soundsystem->SupportsInputFormat(m_secondary_inputdeviceid,
+                                  codec_channels, codec_samplerate))
+    {
+        DeviceInfo dev;
+        if (!m_soundsystem->GetDevice(m_secondary_inputdeviceid, dev) ||
+  dev.default_samplerate == 0)
+  return false;
+
+        input_samplerate = dev.default_samplerate;
+        input_channels = dev.GetSupportedInputChannels(codec_channels);
+        input_samples = CalcSamples(codec_samplerate, codec_samples,
+                          input_samplerate);
+
+        media::AudioFormat infmt(input_samplerate, input_channels);
+        media::AudioFormat outfmt(codec_samplerate, codec_channels);
+        m_secondary_capture_resampler = MakeAudioResampler(infmt, outfmt);
+        if (!m_secondary_capture_resampler)
+  return false;
+
+        m_secondary_capture_buffer.resize(size_t(codec_samples) * codec_channels);
+    }
+    else
+    {
+        m_secondary_capture_resampler.reset();
+        m_secondary_capture_buffer.clear();
+    }
+
+    m_secondary_capture_open = m_soundsystem->OpenInputStream(
+        m_secondary_capture.get(), m_secondary_inputdeviceid,
+        m_soundprop.soundgroupid, input_samplerate, input_channels,
+        input_samples);
+
+    return m_secondary_capture_open;
+}
+
+void ClientNode::CloseSecondaryAudioCapture()
+{
+    if (m_secondary_capture_open && m_secondary_capture)
+        m_soundsystem->CloseInputStream(m_secondary_capture.get());
+
+    m_secondary_capture_open = false;
+    m_secondary_capture_resampler.reset();
+    m_secondary_capture_buffer.clear();
+
+    std::lock_guard<std::mutex> const g(m_secondary_mix_mutex);
+    m_secondary_mix_queue.clear();
+}
+
+void ClientNode::StreamSecondaryCaptureCb(const soundsystem::InputStreamer& /*streamer*/,
+                                const short* buffer, int n_samples)
+{
+    rguard_t const g_snd(LockSndprop());
+
+    if (!m_secondary_capture_open)
+        return;
+
+    int const codec_samplerate = GetAudioCodecSampleRate(m_voice_thread.Codec());
+    int const codec_samples = GetAudioCodecCbSamples(m_voice_thread.Codec());
+    int const codec_channels = GetAudioCodecChannels(m_voice_thread.Codec());
+
+    if (codec_samples <= 0 || codec_samplerate <= 0 || codec_channels == 0)
+        return;
+
+    const short* capture_buffer = buffer;
+    if (m_secondary_capture_resampler)
+    {
+        if ((int)m_secondary_capture_buffer.size() != codec_samples * codec_channels)
+  return;
+
+        int const ret = m_secondary_capture_resampler->Resample(
+  buffer, n_samples, m_secondary_capture_buffer.data(),
+  codec_samples);
+        if (ret <= 0)
+  return;
+
+        capture_buffer = m_secondary_capture_buffer.data();
+    }
+
+    size_t const sample_count = size_t(codec_samples) * codec_channels;
+    std::lock_guard<std::mutex> const g(m_secondary_mix_mutex);
+    for (size_t i = 0; i < sample_count; ++i)
+        m_secondary_mix_queue.push_back(capture_buffer[i]);
+
+    while (m_secondary_mix_queue.size() > sample_count * 4)
+    {
+        for (size_t i = 0; i < sample_count; ++i)
+  m_secondary_mix_queue.pop_front();
+    }
+}
+
+void ClientNode::MixSecondaryAudio(media::AudioFrame& audframe)
+{
+    if (!audframe.input_buffer || audframe.input_samples <= 0 ||
+        audframe.inputfmt.channels <= 0)
+        return;
+
+    size_t const sample_count =
+        size_t(audframe.input_samples) * audframe.inputfmt.channels;
+
+    std::lock_guard<std::mutex> const g(m_secondary_mix_mutex);
+    if (m_secondary_mix_queue.size() < sample_count)
+        return;
+
+    while (m_secondary_mix_queue.size() >= sample_count * 2)
+    {
+        for (size_t i = 0; i < sample_count; ++i)
+  m_secondary_mix_queue.pop_front();
+    }
+
+    short* dst = const_cast<short*>(audframe.input_buffer);
+    for (size_t i = 0; i < sample_count; ++i)
+    {
+        int const mixed = int(dst[i]) + int(m_secondary_mix_queue.front());
+        m_secondary_mix_queue.pop_front();
+        dst[i] = short(std::clamp(mixed, -32768, 32767));
+    }
+}
+
+// Separate thread
 void ClientNode::StreamCaptureCb(const soundsystem::InputStreamer& /*streamer*/,
                                  const short* buffer, int n_samples)
 {
@@ -2871,6 +3046,36 @@ int ClientNode::SendPacket(const FieldPacket& packet, const ACE_INET_Addr& addr)
     }
 
     return (int)ret;
+}
+
+bool ClientNode::InitSecondarySoundInputDevice(int inputdevice)
+{
+    ASSERT_CLIENTNODE_LOCKED(this);
+
+    if (inputdevice == SOUNDDEVICE_IGNORE_ID ||
+        inputdevice == m_soundprop.inputdeviceid ||
+        !m_soundsystem->CheckInputDevice(inputdevice))
+        return false;
+
+    CloseSecondaryAudioCapture();
+    m_secondary_inputdeviceid = inputdevice;
+
+    if (m_mychannel && !OpenSecondaryAudioCapture(m_mychannel->GetAudioCodec()))
+    {
+        m_secondary_inputdeviceid = SOUNDDEVICE_IGNORE_ID;
+        return false;
+    }
+
+    return true;
+}
+
+bool ClientNode::CloseSecondarySoundInputDevice()
+{
+    ASSERT_CLIENTNODE_LOCKED(this);
+
+    CloseSecondaryAudioCapture();
+    m_secondary_inputdeviceid = SOUNDDEVICE_IGNORE_ID;
+    return true;
 }
 
 bool ClientNode::InitSoundInputDevice(int inputdevice)

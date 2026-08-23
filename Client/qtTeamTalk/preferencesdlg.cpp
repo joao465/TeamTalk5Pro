@@ -69,6 +69,7 @@ PreferencesDlg::PreferencesDlg(SoundDevice& devin, SoundDevice& devout, QWidget 
 , m_devout(devout)
 , m_uservideo(nullptr)
 , m_sndloop(nullptr)
+, m_secondaryloop(nullptr)
 {
     ui.setupUi(this);
     setWindowIcon(QIcon(APPICON));
@@ -143,8 +144,10 @@ PreferencesDlg::PreferencesDlg(SoundDevice& devin, SoundDevice& devout, QWidget 
     {
         showDevices(SoundSystem(ui.sndSysBox->currentData().toInt()));
     });
-    connect(ui.inputdevBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &PreferencesDlg::slotSoundInputChange);
+        connect(ui.inputdevBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+  this, &PreferencesDlg::slotSoundInputChange);
+    connect(ui.secondaryMicListenButton, &QAbstractButton::clicked,
+  this, &PreferencesDlg::slotSecondaryMicListen);
     connect(ui.outputdevBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &PreferencesDlg::slotSoundOutputChange);
     connect(ui.refreshinputButton, &QAbstractButton::clicked,
@@ -232,6 +235,12 @@ PreferencesDlg::~PreferencesDlg()
 {
     ttSettings->setValue(SETTINGS_DISPLAY_PREFERENCESWINDOWPOS, saveGeometry());
     TT_CloseSoundLoopbackTest(m_sndloop);
+    if (m_secondaryloop)
+    {
+        TT_CloseSoundLoopbackTest(m_secondaryloop);
+        m_secondaryloop = nullptr;
+        restoreSecondarySoundInput();
+    }
 }
 
 void PreferencesDlg::initDevices()
@@ -311,6 +320,8 @@ void PreferencesDlg::showDevices(SoundSystem snd)
     TT_GetDefaultSoundDevicesEx(snd, &default_inputid, &default_outputid);
 
     ui.inputdevBox->clear();
+    ui.secondaryInputDevBox->clear();
+    ui.secondaryInputDevBox->addItem(tr("Desativado"), TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL);
     ui.outputdevBox->clear();
 
     SoundDevice dev;
@@ -331,8 +342,10 @@ void PreferencesDlg::showDevices(SoundSystem snd)
 
         if (m_sounddevices[i].nSoundSystem != snd || m_sounddevices[i].nMaxInputChannels == 0)
             continue;
-        ui.inputdevBox->addItem(_Q(m_sounddevices[i].szDeviceName),
-                                m_sounddevices[i].nDeviceID);
+                ui.inputdevBox->addItem(_Q(m_sounddevices[i].szDeviceName),
+                      m_sounddevices[i].nDeviceID);
+        ui.secondaryInputDevBox->addItem(_Q(m_sounddevices[i].szDeviceName),
+                               m_sounddevices[i].nDeviceID);
     }
 
     if(add_no_device)
@@ -349,6 +362,18 @@ void PreferencesDlg::showDevices(SoundSystem snd)
     int index = ui.inputdevBox->findData(devid);
     if(index >= 0)
         ui.inputdevBox->setCurrentIndex(index);
+
+    devid = ttSettings->value(SETTINGS_SOUND_SECONDARY_INPUTDEVICE,
+                    SETTINGS_SOUND_SECONDARY_INPUTDEVICE_DEFAULT).toInt();
+    uid = ttSettings->value(SETTINGS_SOUND_SECONDARY_INPUTDEVICE_UID, "").toString();
+    if (getSoundDevice(uid, true, m_sounddevices, dev) && dev.nDeviceID != devid)
+        devid = dev.nDeviceID;
+
+    index = ui.secondaryInputDevBox->findData(devid);
+    if (index < 0)
+        index = ui.secondaryInputDevBox->findData(TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL);
+    if (index >= 0)
+        ui.secondaryInputDevBox->setCurrentIndex(index);
 
     //for WASAPI, make a default device in the same way as DirectSound
     if(snd == SOUNDSYSTEM_WASAPI)
@@ -867,15 +892,35 @@ void PreferencesDlg::slotSaveChanges()
     }
     if(m_modtab.find(SOUND_TAB) != m_modtab.end())
     {
-        int inputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL, outputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL;
+                int inputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL;
+        int secondaryinputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL;
+        int outputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL;
         if(ui.inputdevBox->count())
-            inputid = ui.inputdevBox->itemData(ui.inputdevBox->currentIndex()).toInt();
+  inputid = ui.inputdevBox->itemData(ui.inputdevBox->currentIndex()).toInt();
+        if(ui.secondaryInputDevBox->count())
+  secondaryinputid = ui.secondaryInputDevBox->itemData(ui.secondaryInputDevBox->currentIndex()).toInt();
         if(ui.outputdevBox->count())
-            outputid = ui.outputdevBox->itemData(ui.outputdevBox->currentIndex()).toInt();
+  outputid = ui.outputdevBox->itemData(ui.outputdevBox->currentIndex()).toInt();
 
         int def_inputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL, def_outputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL;
         TT_GetDefaultSoundDevicesEx(getSoundSystem(), &def_inputid, &def_outputid);
         TT_CloseSoundLoopbackTest(m_sndloop);
+        if (m_secondaryloop)
+        {
+  TT_CloseSoundLoopbackTest(m_secondaryloop);
+  m_secondaryloop = nullptr;
+  ui.secondaryMicListenButton->setChecked(false);
+        }
+
+        int resolvedPrimaryInput = inputid == SOUNDDEVICEID_DEFAULT ? def_inputid : inputid;
+        if (secondaryinputid != TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL &&
+  secondaryinputid == resolvedPrimaryInput)
+        {
+  QMessageBox::information(this, tr("Sound System"),
+      tr("O microfone secundário deve ser diferente do microfone principal. O secundário foi desativado."));
+  secondaryinputid = TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL;
+  setCurrentItemData(ui.secondaryInputDevBox, secondaryinputid);
+        }
 
         SoundSystem oldsndsys = SoundSystem(ttSettings->value(SETTINGS_SOUND_SOUNDSYSTEM, SOUNDSYSTEM_NONE).toInt());
         SoundSystem newsndsys = SoundSystem(ui.sndSysBox->currentData().toInt());
@@ -937,17 +982,27 @@ void PreferencesDlg::slotSaveChanges()
                                      getSoundDeviceUID(m_sounddevices[i]));
         }
 
+                ttSettings->setValue(SETTINGS_SOUND_SECONDARY_INPUTDEVICE_UID, "");
+        for(int i=0;i<m_sounddevices.size();i++)
+        {
+  if(secondaryinputid == m_sounddevices[i].nDeviceID)
+      ttSettings->setValue(SETTINGS_SOUND_SECONDARY_INPUTDEVICE_UID,
+                           getSoundDeviceUID(m_sounddevices[i]));
+        }
+
         ttSettings->setValue(SETTINGS_SOUND_OUTPUTDEVICE_UID, "");
         for(int i=0;i<m_sounddevices.size();i++)
         {
-            if(outputid == m_sounddevices[i].nDeviceID)
-                ttSettings->setValue(SETTINGS_SOUND_OUTPUTDEVICE_UID,
-                                     getSoundDeviceUID(m_sounddevices[i]));
+  if(outputid == m_sounddevices[i].nDeviceID)
+      ttSettings->setValue(SETTINGS_SOUND_OUTPUTDEVICE_UID,
+                           getSoundDeviceUID(m_sounddevices[i]));
         }
 
         // reinit sound device if anything has changed
         bool sndsysinit = oldsndsys != ttSettings->value(SETTINGS_SOUND_SOUNDSYSTEM).toInt();
         sndsysinit |= ttSettings->value(SETTINGS_SOUND_INPUTDEVICE, SETTINGS_SOUND_INPUTDEVICE_DEFAULT).toInt() != inputid;
+        sndsysinit |= ttSettings->value(SETTINGS_SOUND_SECONDARY_INPUTDEVICE,
+                               SETTINGS_SOUND_SECONDARY_INPUTDEVICE_DEFAULT).toInt() != secondaryinputid;
         sndsysinit |= ttSettings->value(SETTINGS_SOUND_OUTPUTDEVICE, SETTINGS_SOUND_OUTPUTDEVICE_DEFAULT).toInt() != outputid;
         // Sound devices that has SoundDeviceEffects must also be restarted if AGC, AEC or denoise has changed
         sndsysinit |= ttSettings->value(SETTINGS_SOUND_ECHOCANCEL, SETTINGS_SOUND_ECHOCANCEL_DEFAULT).toBool() != ui.echocancelBox->isChecked();
@@ -955,6 +1010,8 @@ void PreferencesDlg::slotSaveChanges()
         sndsysinit |= ttSettings->value(SETTINGS_SOUND_DENOISING, SETTINGS_SOUND_DENOISING_DEFAULT).toBool() != ui.denoisingBox->isChecked();
 
         ttSettings->setValueOrClear(SETTINGS_SOUND_INPUTDEVICE, inputid, SETTINGS_SOUND_INPUTDEVICE_DEFAULT);
+        ttSettings->setValueOrClear(SETTINGS_SOUND_SECONDARY_INPUTDEVICE, secondaryinputid,
+                          SETTINGS_SOUND_SECONDARY_INPUTDEVICE_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_SOUND_OUTPUTDEVICE, outputid, SETTINGS_SOUND_OUTPUTDEVICE_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_SOUND_ECHOCANCEL, ui.echocancelBox->isChecked(), SETTINGS_SOUND_ECHOCANCEL_DEFAULT);
         ttSettings->setValueOrClear(SETTINGS_SOUND_AGC, ui.agcBox->isChecked(), SETTINGS_SOUND_AGC_DEFAULT);
@@ -1255,6 +1312,7 @@ void PreferencesDlg::slotSoundRestart()
 {
     ClientFlags flags = TT_GetFlags(ttInst);
 
+    TT_CloseSecondarySoundInputDevice(ttInst);
     if(flags & CLIENT_SNDINOUTPUT_DUPLEX)
         TT_CloseSoundDuplexDevices(ttInst);
     if(flags & CLIENT_SNDINPUT_READY)
@@ -1341,6 +1399,80 @@ void PreferencesDlg::slotSoundTestDevices(bool checked)
     }
 }
 
+void PreferencesDlg::restoreSecondarySoundInput()
+{
+    int secondaryid = getSelectedSecondarySndInputDevice();
+    int primaryid = getSelectedSndInputDevice();
+    if (secondaryid != TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL &&
+        secondaryid != primaryid)
+    {
+        TT_InitSecondarySoundInputDevice(ttInst, secondaryid);
+    }
+}
+
+void PreferencesDlg::slotSecondaryMicListen(bool checked)
+{
+    if (checked)
+    {
+        if (ui.sndtestButton->isChecked())
+  ui.sndtestButton->click();
+
+        int inputid = ui.secondaryInputDevBox->currentData().toInt();
+        if (inputid == TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL)
+        {
+  QMessageBox::information(this, tr("Escuta do mic secundário"),
+                           tr("Selecione um microfone secundário primeiro."));
+  ui.secondaryMicListenButton->setChecked(false);
+  return;
+        }
+
+        SoundSystem sndsys = getSoundSystem();
+        int outputid = ui.outputdevBox->currentData().toInt();
+        if (outputid == SOUNDDEVICEID_DEFAULT)
+  TT_GetDefaultSoundDevicesEx(sndsys, nullptr, &outputid);
+
+        SoundDevice in_dev = {}, out_dev = {};
+        if (!getSoundDevice(inputid, m_sounddevices, in_dev) ||
+  !getSoundDevice(outputid, m_sounddevices, out_dev))
+        {
+  ui.secondaryMicListenButton->setChecked(false);
+  return;
+        }
+
+        TT_CloseSecondarySoundInputDevice(ttInst);
+
+        int samplerate = getSoundDuplexSampleRate(in_dev, out_dev);
+        if (samplerate == 0)
+  samplerate = out_dev.nDefaultSampleRate;
+        if (samplerate <= 0)
+  samplerate = in_dev.nDefaultSampleRate;
+
+        AudioPreprocessor preprocessor = {};
+        preprocessor.nPreprocessor = NO_AUDIOPREPROCESSOR;
+        SoundDeviceEffects effects = {};
+        m_secondaryloop = TT_StartSoundLoopbackTestEx(
+  inputid, outputid, samplerate, 1, FALSE,
+  &preprocessor, &effects);
+
+        if (!m_secondaryloop)
+        {
+  QMessageBox::critical(this, tr("Escuta do mic secundário"),
+                        tr("Não foi possível iniciar a escuta do microfone secundário."));
+  ui.secondaryMicListenButton->setChecked(false);
+  restoreSecondarySoundInput();
+        }
+    }
+    else
+    {
+        if (m_secondaryloop)
+        {
+  TT_CloseSoundLoopbackTest(m_secondaryloop);
+  m_secondaryloop = nullptr;
+        }
+        restoreSecondarySoundInput();
+    }
+}
+
 void PreferencesDlg::slotSoundDefaults()
 {
     int default_inputid = 0, default_outputid = 0;
@@ -1352,6 +1484,7 @@ void PreferencesDlg::slotSoundDefaults()
         showDevices(outdev.nSoundSystem);
 
     setCurrentItemData(ui.inputdevBox, default_inputid);
+    setCurrentItemData(ui.secondaryInputDevBox, TT_SOUNDDEVICE_ID_TEAMTALK_VIRTUAL);
     setCurrentItemData(ui.outputdevBox, default_outputid);
 
     bool echocapable = isSoundDeviceEchoCapable(indev, outdev);
