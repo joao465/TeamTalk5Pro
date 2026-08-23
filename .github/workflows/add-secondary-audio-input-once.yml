@@ -43,3 +43,5 @@ jobs:
                   .github/workflows/add-secondary-audio-input-once.yml
           git commit -m "Add secondary microphone input and monitor"
           git push origin teamtalk-pro-mic-eq
+
+# retrigger
