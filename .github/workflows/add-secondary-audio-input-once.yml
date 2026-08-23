@@ -33,27 +33,75 @@ jobs:
           pathlib.Path('/tmp/secondary_patch.py').write_bytes(gzip.decompress(base64.b64decode(m.group(1))))
           PY
 
-      - name: Save decoded patch script to branch
-        shell: bash
+      - name: Make patch tolerant of current source
+        shell: python
         run: |
-          cp /tmp/secondary_patch.py .github/secondary_patch_debug.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/secondary_patch_debug.py
-          if ! git diff --cached --quiet; then
-            git commit -m "Expose decoded secondary microphone patch"
-            git push origin teamtalk-pro-mic-eq
-          fi
+          from pathlib import Path
+          p = Path('/tmp/secondary_patch.py')
+          s = p.read_text(encoding='utf-8')
+          start = s.index('def replace_once')
+          end = s.index('\nreplace_once(', start)
+          helpers = r'''def _flex_pattern(value):
+              import re
+              parts = [re.escape(x) for x in re.split(r'\s+', value.strip()) if x]
+              return r'\s+'.join(parts)
+
+          def replace_once(path, old, new):
+              import re
+              p = Path(path)
+              data = p.read_text(encoding='utf-8')
+              if data.count(old) == 1:
+                  p.write_text(data.replace(old, new, 1), encoding='utf-8', newline='\n')
+                  return
+
+              matches = list(re.finditer(_flex_pattern(old), data, re.MULTILINE))
+              if len(matches) == 1:
+                  m = matches[0]
+                  p.write_text(data[:m.start()] + new + data[m.end():], encoding='utf-8', newline='\n')
+                  return
+
+              old_lines = [line.strip() for line in old.splitlines() if line.strip()]
+              lines = data.splitlines(keepends=True)
+              candidates = []
+              if old_lines:
+                  first, last = old_lines[0], old_lines[-1]
+                  max_span = len(old_lines) + 12
+                  for i, line in enumerate(lines):
+                      if line.strip() != first:
+                          continue
+                      for j in range(i, min(len(lines), i + max_span)):
+                          if lines[j].strip() == last:
+                              candidates.append((i, j))
+                              break
+              if len(candidates) == 1:
+                  i, j = candidates[0]
+                  a = sum(len(x) for x in lines[:i])
+                  b = sum(len(x) for x in lines[:j + 1])
+                  p.write_text(data[:a] + new + '\n' + data[b:], encoding='utf-8', newline='\n')
+                  return
+
+              raise SystemExit(f'{path}: flexible replace failed; exact={data.count(old)}, regex={len(matches)}, spans={len(candidates)}')
+
+          def insert_before(path, marker, text):
+              import re
+              p = Path(path)
+              data = p.read_text(encoding='utf-8')
+              if data.count(marker) == 1:
+                  p.write_text(data.replace(marker, text + marker, 1), encoding='utf-8', newline='\n')
+                  return
+              matches = list(re.finditer(_flex_pattern(marker), data, re.MULTILINE))
+              if len(matches) != 1:
+                  raise SystemExit(f'{path}: flexible insert failed; regex={len(matches)}')
+              m = matches[0]
+              p.write_text(data[:m.start()] + text + data[m.start():], encoding='utf-8', newline='\n')
+          '''
+          helpers = '\n'.join(line[10:] if line.startswith('          ') else line for line in helpers.splitlines())
+          p.write_text(s[:start] + helpers + s[end:], encoding='utf-8', newline='\n')
 
       - name: Prepare current source for patch
         shell: python
         run: |
           from pathlib import Path
-          p = Path('Library/TeamTalk_DLL/TeamTalk.h')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace(' ' * 51 + 'IN INT32 nInputDeviceID);', ' ' * 41 + 'IN INT32 nInputDeviceID);')
-          p.write_text(s, encoding='utf-8', newline='\n')
-
           p = Path('Library/TeamTalkLib/teamtalk/client/ClientNode.cpp')
           s = p.read_text(encoding='utf-8')
           old = '        CloseVideoCapture();\n        m_mediaplayback_streams.clear(); //clear all players before removing sound group\n        CloseSoundInputDevice();'
@@ -76,6 +124,15 @@ jobs:
           new = '        CloseVideoCapture();\n        CloseSecondarySoundInputDevice();\n        m_mediaplayback_streams.clear(); //clear all players before removing sound group\n        CloseSoundInputDevice();'
           s = s.replace(old, new)
           p.write_text(s, encoding='utf-8', newline='\n')
+
+      - name: Verify secondary microphone source
+        if: success()
+        shell: bash
+        run: |
+          grep -q 'TT_InitSecondarySoundInputDevice' Library/TeamTalk_DLL/TeamTalk.h
+          grep -q 'secondaryInputDevBox' Client/qtTeamTalk/preferences.ui
+          grep -q 'MixSecondaryAudio(audframe)' Library/TeamTalkLib/teamtalk/client/ClientNode.cpp
+          grep -q 'm_secondary_capture' Library/TeamTalkLib/teamtalk/client/ClientNode.h
 
       - name: Commit secondary audio input
         if: success()
