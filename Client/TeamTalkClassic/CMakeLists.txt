@@ -54,7 +54,7 @@ if (MSVC)
     set (VS_BUILD 0)
   endif()
 
-  cmake_dependent_option (BUILD_TEAMTALK_CLIENT_TEAMTALKCLASSIC "Build MFC TeamTalk 5 Classic for client example" ON "VS_BUILD" OFF)
+  cmake_dependent_option (BUILD_TEAMTALK_CLIENT_TEAMTALKCLASSIC "Build native Windows TeamTalk 5 Pro client" ON "VS_BUILD" OFF)
 
   set(CMAKE_MFC_FLAG 1)
 
@@ -83,7 +83,9 @@ if (MSVC)
 
   if (BUILD_TEAMTALK_CLIENT_TEAMTALKCLASSIC)
     set_property(TARGET TeamTalk5Classic PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../Library/TeamTalk_DLL")
+    set_target_properties(TeamTalk5Classic PROPERTIES OUTPUT_NAME "TeamTalk5")
 
+    target_compile_features(TeamTalk5Classic PUBLIC cxx_std_17)
     target_compile_options (TeamTalk5Classic PUBLIC ${TTCLASSIC_COMPILE_FLAGS})
     if (BUILD_TEAMTALK_CLIENT_PRISM)
       target_compile_definitions (TeamTalk5Classic PUBLIC ENABLE_PRISM)
