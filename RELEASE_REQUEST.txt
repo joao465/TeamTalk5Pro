@@ -1,1 +1,1 @@
-# Coloque aqui a próxima versão do TeamTalk Pro para publicar, por exemplo: 5.26.4
+5.26.3
