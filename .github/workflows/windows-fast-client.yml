@@ -156,8 +156,6 @@ jobs:
         New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
         Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
 
-        # Instalado: usa %APPDATA%\TeamTalk 5 Pro\TeamTalk5Pro.ini
-        # Por isso o instalador nao inclui um INI local ao lado do EXE.
         Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
 
     - name: Build independent installer
