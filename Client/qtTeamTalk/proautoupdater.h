@@ -49,11 +49,11 @@ public:
         if (!m_parentWindow)
             return;
 
-        // Replace the original BearWare update action with the Pro updater.
-        // The automatic legacy check is neutralized in appinfo.h.
+        // Replace only the original MainWindow handler for this action. Do not
+        // disturb any Qt/menu internals that may also observe the QAction.
         if (QAction* action = m_parentWindow->findChild<QAction*>("actionCheckUpdate"))
         {
-            QObject::disconnect(action, nullptr, nullptr, nullptr);
+            action->disconnect(m_parentWindow);
             QObject::connect(action, &QAction::triggered, this, [this]() {
                 checkForUpdates(true);
             });
