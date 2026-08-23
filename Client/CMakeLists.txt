@@ -7,6 +7,7 @@ endif()
 
 if (MSVC)
 
+  # TeamTalk 5 Pro for Windows is now the native MFC/Win32 client.
   add_subdirectory (TeamTalkClassic)
   if (CMAKE_CSharp_COMPILER)
     add_subdirectory (TeamTalkApp.NET)
@@ -18,6 +19,4 @@ endif()
 
 add_subdirectory (jSpamBot)
 add_subdirectory (jTeamTalk)
-add_subdirectory (qtTeamTalk)
 add_subdirectory (ttserverlog)
-
