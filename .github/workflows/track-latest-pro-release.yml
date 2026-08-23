@@ -1,0 +1,74 @@
+name: Track Latest TeamTalk Pro Release Run
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "TRACK_LATEST_PRO_RELEASE.txt"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find latest Pro release run
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_json="$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow publish-pro-release.yml \
+            --branch teamtalk-pro-mic-eq \
+            --limit 1 \
+            --json databaseId,url,status,conclusion,createdAt,headBranch,event)"
+
+          run_id="$(printf '%s' "$run_json" | jq -r '.[0].databaseId // empty')"
+          run_url="$(printf '%s' "$run_json" | jq -r '.[0].url // empty')"
+          status="$(printf '%s' "$run_json" | jq -r '.[0].status // empty')"
+          conclusion="$(printf '%s' "$run_json" | jq -r '.[0].conclusion // empty')"
+          created_at="$(printf '%s' "$run_json" | jq -r '.[0].createdAt // empty')"
+
+          if [ -z "$run_id" ]; then
+            echo "No publish-pro-release run was found" >&2
+            exit 1
+          fi
+
+          jq -n \
+            --argjson run_id "$run_id" \
+            --arg url "$run_url" \
+            --arg status "$status" \
+            --arg conclusion "$conclusion" \
+            --arg created_at "$created_at" \
+            '{run_id:$run_id,url:$url,status:$status,conclusion:$conclusion,created_at:$created_at,workflow:"publish-pro-release.yml",branch:"teamtalk-pro-mic-eq"}' \
+            > LAST_RELEASE_RUN.json
+
+          cat LAST_RELEASE_RUN.json
+
+      - name: Save tracking file to master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          content="$(base64 -w0 LAST_RELEASE_RUN.json)"
+          current_sha="$(gh api "repos/${{ github.repository }}/contents/LAST_RELEASE_RUN.json?ref=master" --jq '.sha' 2>/dev/null || true)"
+
+          if [ -n "$current_sha" ]; then
+            gh api --method PUT "repos/${{ github.repository }}/contents/LAST_RELEASE_RUN.json" \
+              -f message="Track latest TeamTalk Pro release run [skip ci]" \
+              -f branch="master" \
+              -f content="$content" \
+              -f sha="$current_sha" >/dev/null
+          else
+            gh api --method PUT "repos/${{ github.repository }}/contents/LAST_RELEASE_RUN.json" \
+              -f message="Track latest TeamTalk Pro release run [skip ci]" \
+              -f branch="master" \
+              -f content="$content" >/dev/null
+          fi
