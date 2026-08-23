@@ -18,6 +18,7 @@
 #include "mainwindow.h"
 #include "license.h"
 #include "appinfo.h"
+#include "proautoupdater.h"
 
 #include <QAbstractNativeEventFilter>
 #include <QApplication>
@@ -26,6 +27,7 @@
 #include <QPalette>
 #include <QSettings>
 #include <QStyleFactory>
+#include <QTimer>
 #include <QUrl>
 #include <QtPlugin>
 
@@ -114,14 +116,6 @@ static Bool qt_keypress_scanner(Display *, XEvent *event, XPointer arg)
     {
         data->error = (! data->release || event->xkey.time - data->timestamp > 10);
         return (! data->error);
-    }
-
-    // must be XKeyRelease event
-    if (data->release)
-    {
-        // found a second release
-        data->error = true;
-        return false;
     }
 
     // found a single release
@@ -310,6 +304,8 @@ int main(int argc, char* argv[])
         cfgfile = QApplication::arguments()[idx];
 
     MainWindow window(cfgfile);
+    auto* proUpdater = new ProAutoUpdater(&window);
+    proUpdater->installMenuHook();
 
     /* Set license information before creating the first client instance */
     TT_SetLicenseInformation(_W(QString(REGISTRATION_NAME)), _W(QString(REGISTRATION_KEY)));
@@ -328,6 +324,10 @@ int main(int argc, char* argv[])
     window.loadSettings(); //load settings now that we have ttInst
 
     window.show();
+    QTimer::singleShot(1500, proUpdater, [proUpdater]() {
+        proUpdater->checkForUpdates(false);
+    });
+
     int ret = app.exec();
     TT_CloseTeamTalk(ttInst);
     return ret;
