@@ -1,1 +1,1 @@
-Dispatch TeamTalk Pro 5.26.3 release build.
+Dispatch TeamTalk Pro 5.26.3 release build retry after fixing CMake source path.
