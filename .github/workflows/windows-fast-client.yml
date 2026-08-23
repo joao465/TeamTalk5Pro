@@ -4,45 +4,208 @@ on:
   pull_request:
     branches: [ "master" ]
     paths:
+      - "Client/**"
+      - "Library/TeamTalkLib/**"
+      - "Library/TeamTalk_DLL/**"
+      - "Build/**"
+      - "Setup/Client/**"
+      - "Setup/Installer/**"
+      - "CMakeLists.txt"
       - ".github/workflows/windows-fast-client.yml"
+  workflow_dispatch:
 
-permissions:
-  contents: write
+concurrency:
+  group: windows-fast-client-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   client-x64:
-    if: github.head_ref == 'teamtalk-pro-mic-eq'
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.head_ref == 'teamtalk-pro-mic-eq'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
     steps:
-      - name: Checkout branch
-        uses: actions/checkout@v4
-        with:
-          ref: teamtalk-pro-mic-eq
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        submodules: true
 
-      - name: Apply secondary microphone source changes
-        shell: bash
-        env:
-          PATCH_B64: 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
-        run: python -c 'import os,base64,gzip; exec(gzip.decompress(base64.b64decode(os.environ["PATCH_B64"])))'
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        arch: win64_msvc2022_64
+        version: '6.11.1'
+        modules: 'qtmultimedia qtspeech'
+        setup-python: false
+        cache: true
+        cache-key-prefix: teamtalk-fast-qt
+        aqtsource: 'aqtinstall@git+https://github.com/miurahr/aqtinstall.git@master'
 
-      - name: Commit source changes and restore normal workflow
-        shell: bash
-        run: |
-          git show HEAD^:.github/workflows/windows-fast-client.yml > .github/workflows/windows-fast-client.yml
-          rm -f .github/workflows/add-secondary-audio-input-once.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Client/qtTeamTalk/settings.h \
-                  Client/qtTeamTalk/utilsound.h \
-                  Client/qtTeamTalk/utilsound.cpp \
-                  Client/qtTeamTalk/preferences.ui \
-                  Client/qtTeamTalk/preferencesdlg.h \
-                  Client/qtTeamTalk/preferencesdlg.cpp \
-                  Library/TeamTalk_DLL/TeamTalk.h \
-                  Library/TeamTalkLib/bin/dll/TeamTalk.cpp \
-                  Library/TeamTalkLib/teamtalk/client/ClientNode.h \
-                  Library/TeamTalkLib/teamtalk/client/ClientNode.cpp \
-                  .github/workflows/windows-fast-client.yml \
-                  .github/workflows/add-secondary-audio-input-once.yml
-          git commit -m "Add secondary microphone input and monitor"
-          git push origin HEAD:teamtalk-pro-mic-eq
+    - name: Install MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MSYS
+        path-type: inherit
+        update: true
+        install: base-devel
+        release: false
+
+    - name: Install NASM
+      working-directory: ${{ runner.workspace }}
+      shell: cmd
+      run: |
+        curl -L -o nasm.zip https://www.nasm.us/pub/nasm/releasebuilds/3.01/win64/nasm-3.01-win64.zip
+        7z x nasm.zip
+        echo %CD%\nasm-3.01>> %GITHUB_PATH%
+
+    - name: Install Inno Setup
+      shell: pwsh
+      run: |
+        choco install innosetup --yes --no-progress
+
+    - name: Cache TeamTalk toolchain
+      id: toolchain-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.workspace }}/install-toolchain
+        key: teamtalk-toolchain-win64-${{ hashFiles('Build/**', 'Library/TeamTalkLib/**/CMakeLists.txt', 'CMakeLists.txt') }}
+        restore-keys: |
+          teamtalk-toolchain-win64-
+
+    - name: Cache incremental build
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.workspace }}/output-fast
+        key: teamtalk-client-win64-qt611-${{ github.sha }}
+        restore-keys: |
+          teamtalk-client-win64-qt611-
+
+    - name: Configure client build
+      working-directory: ${{ runner.workspace }}
+      shell: pwsh
+      run: |
+        $externalProjects = "ON"
+        if ("${{ steps.toolchain-cache.outputs.cache-hit }}" -eq "true") {
+          $externalProjects = "OFF"
+        }
+
+        cmake -S TeamTalk5 -B output-fast -A x64 `
+          -DBUILD_TEAMTALK_LIBRARIES=OFF `
+          -DBUILD_TEAMTALK_SERVERS=OFF `
+          -DBUILD_TEAMTALK_DOCUMENTATION=OFF `
+          -DFEATURE_WEBRTC=OFF `
+          -DTOOLCHAIN_BUILD_EXTERNALPROJECTS=$externalProjects `
+          -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain
+
+    - name: Build TeamTalk client
+      working-directory: ${{ runner.workspace }}
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        cmake --build output-fast --parallel --config Release --target TeamTalk5
+        cmake --build output-fast --parallel --config Release --target QtTeamTalk5-windeploy-release
+
+    - name: Create portable and installer source
+      shell: pwsh
+      run: |
+        $stage = "${{ runner.workspace }}\teamtalk-pro-5.26.2-portable-win64"
+        $client = Join-Path $stage "Client"
+        $installerSource = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-source"
+
+        Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $installerSource -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $client | Out-Null
+
+        Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\TeamTalk5.exe" $client -Force
+
+        $dll = Get-ChildItem "${{ github.workspace }}\Library" -Filter "TeamTalk5.dll" -Recurse |
+          Where-Object { $_.FullName -notmatch "\\test\\" } |
+          Select-Object -First 1
+        if (-not $dll) {
+          throw "TeamTalk5.dll nao foi encontrado"
+        }
+        Copy-Item $dll.FullName $client -Force
+
+        if (-not (Test-Path "${{ github.workspace }}\Client\qtTeamTalk\windeployqt")) {
+          throw "Pasta windeployqt nao foi criada"
+        }
+        Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\windeployqt\*" $client -Recurse -Force
+
+        $languages = Join-Path $client "languages"
+        New-Item -ItemType Directory -Force -Path $languages | Out-Null
+        Get-ChildItem "${{ github.workspace }}\Client\qtTeamTalk\languages" -Filter "*.qm" -ErrorAction SilentlyContinue |
+          Copy-Item -Destination $languages
+
+        Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini") -Force
+        Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini.default") -Force
+        Copy-Item "${{ github.workspace }}\Setup\Client\Sounds" (Join-Path $client "Sounds") -Recurse -Force
+        Copy-Item "${{ github.workspace }}\Setup\Installer\Windows\License.txt" (Join-Path $stage "License.txt") -Force
+
+        if (Test-Path (Join-Path $stage "Server")) {
+          throw "Erro: a pasta Server apareceu no portatil"
+        }
+
+        New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
+        Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
+
+        # Instalado: usa %APPDATA%\TeamTalk 5 Pro\TeamTalk5Pro.ini
+        # Por isso o instalador nao inclui um INI local ao lado do EXE.
+        Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
+
+    - name: Build independent installer
+      shell: pwsh
+      run: |
+        $installerSource = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-source"
+        $installerOut = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-win64"
+        $iss = "${{ github.workspace }}\Setup\Installer\Windows\TeamTalkPro.iss"
+
+        Remove-Item $installerOut -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $installerOut | Out-Null
+
+        $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+        if (-not (Test-Path $iscc)) {
+          $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if ($cmd) {
+            $iscc = $cmd.Source
+          }
+        }
+        if (-not (Test-Path $iscc)) {
+          throw "ISCC.exe do Inno Setup nao foi encontrado"
+        }
+
+        # Deixa o Inno Setup usar a pasta Output padrao.
+        # Depois copiamos o EXE pronto para a pasta do artifact.
+        # Isso evita o erro de caminho D:\D:\... no runner.
+        $defineArg = "-dClientDir=$installerSource"
+
+        & $iscc $defineArg $iss
+        if ($LASTEXITCODE -ne 0) {
+          throw "Inno Setup falhou com codigo $LASTEXITCODE"
+        }
+
+        $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        if (-not (Test-Path $builtSetup)) {
+          throw "O instalador foi compilado, mas o EXE nao foi encontrado em: $builtSetup"
+        }
+
+        $setup = Join-Path $installerOut "TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        Copy-Item $builtSetup $setup -Force
+
+        if (-not (Test-Path $setup)) {
+          throw "Falha ao copiar o instalador final para a pasta do artifact"
+        }
+
+    - name: Upload portable client
+      uses: actions/upload-artifact@v7
+      with:
+        name: teamtalk-pro-5.26.2-portable-win64
+        path: ${{ runner.workspace }}/teamtalk-pro-5.26.2-portable-win64
+        if-no-files-found: error
+
+    - name: Upload independent installer
+      uses: actions/upload-artifact@v7
+      with:
+        name: teamtalk-pro-5.26.2-installer-win64
+        path: ${{ runner.workspace }}/teamtalk-pro-5.26.2-installer-win64/TeamTalk_5_Pro_5.26.2_Setup_x64.exe
+        if-no-files-found: error
