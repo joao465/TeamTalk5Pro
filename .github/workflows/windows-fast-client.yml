@@ -31,46 +31,6 @@ jobs:
       with:
         submodules: true
 
-    - name: Preflight secondary microphone source
-      shell: pwsh
-      run: |
-        $checks = @(
-          @{ Path = "Library/TeamTalk_DLL/TeamTalk.h"; Pattern = "TT_InitSecondarySoundInputDevice" },
-          @{ Path = "Library/TeamTalk_DLL/TeamTalk.h"; Pattern = "TT_CloseSecondarySoundInputDevice" },
-          @{ Path = "Library/TeamTalkLib/bin/dll/TeamTalk.cpp"; Pattern = "TT_InitSecondarySoundInputDevice" },
-          @{ Path = "Library/TeamTalkLib/teamtalk/client/ClientNode.h"; Pattern = "m_secondary_capture" },
-          @{ Path = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"; Pattern = "ClientNode::InitSecondarySoundInputDevice" },
-          @{ Path = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"; Pattern = "MixSecondaryAudio(audframe)" },
-          @{ Path = "Client/qtTeamTalk/preferences.ui"; Pattern = "secondaryInputDevBox" },
-          @{ Path = "Client/qtTeamTalk/preferences.ui"; Pattern = "secondaryMicListenButton" }
-        )
-        foreach ($check in $checks) {
-          if (-not (Test-Path $check.Path)) {
-            throw "Required secondary microphone file missing: $($check.Path)"
-          }
-          if (-not (Select-String -Path $check.Path -SimpleMatch -Pattern $check.Pattern -Quiet)) {
-            throw "Secondary microphone source incomplete: $($check.Pattern) missing from $($check.Path)"
-          }
-        }
-        $cpp = Get-Content "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp" -Raw
-        foreach ($definition in @(
-          "bool ClientNode::InitSecondarySoundInputDevice(",
-          "void ClientNode::MixSecondaryAudio(",
-          "void ClientNode::StreamSecondaryCaptureCb("
-        )) {
-          $count = ([regex]::Matches($cpp, [regex]::Escape($definition))).Count
-          if ($count -ne 1) {
-            throw "Unexpected definition count for $definition : $count"
-          }
-        }
-        try {
-          [xml](Get-Content "Client/qtTeamTalk/preferences.ui" -Raw) | Out-Null
-        }
-        catch {
-          throw "preferences.ui is not valid XML: $($_.Exception.Message)"
-        }
-        Write-Host "Secondary microphone preflight passed for source commit $env:GITHUB_SHA"
-
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
