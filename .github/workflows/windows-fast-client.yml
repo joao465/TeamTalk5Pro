@@ -1,0 +1,203 @@
+name: Windows Fast Client
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "Client/**"
+      - "Library/TeamTalkLib/**"
+      - "Library/TeamTalk_DLL/**"
+      - "Build/**"
+      - "Setup/Client/**"
+      - "Setup/Installer/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/windows-fast-client.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: windows-fast-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client-x64:
+    if: github.event_name != 'pull_request' || github.head_ref == 'teamtalk-pro-mic-eq'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        submodules: true
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        arch: win64_msvc2022_64
+        version: '6.11.1'
+        modules: 'qtmultimedia qtspeech'
+        setup-python: false
+        cache: true
+        cache-key-prefix: teamtalk-fast-qt
+        aqtsource: 'aqtinstall@git+https://github.com/miurahr/aqtinstall.git@master'
+
+    - name: Install MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MSYS
+        path-type: inherit
+        update: true
+        install: base-devel
+        release: false
+
+    - name: Install NASM
+      working-directory: ${{ runner.workspace }}
+      shell: cmd
+      run: |
+        curl -L -o nasm.zip https://www.nasm.us/pub/nasm/releasebuilds/3.01/win64/nasm-3.01-win64.zip
+        7z x nasm.zip
+        echo %CD%\nasm-3.01>> %GITHUB_PATH%
+
+    - name: Install Inno Setup
+      shell: pwsh
+      run: |
+        choco install innosetup --yes --no-progress
+
+    - name: Cache TeamTalk toolchain
+      id: toolchain-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.workspace }}/install-toolchain
+        key: teamtalk-toolchain-win64-${{ hashFiles('Build/**', 'Library/TeamTalkLib/**/CMakeLists.txt', 'CMakeLists.txt') }}
+        restore-keys: |
+          teamtalk-toolchain-win64-
+
+    - name: Cache incremental build
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.workspace }}/output-fast
+        key: teamtalk-client-win64-qt611-${{ github.sha }}
+        restore-keys: |
+          teamtalk-client-win64-qt611-
+
+    - name: Configure client build
+      working-directory: ${{ runner.workspace }}
+      shell: pwsh
+      run: |
+        $externalProjects = "ON"
+        if ("${{ steps.toolchain-cache.outputs.cache-hit }}" -eq "true") {
+          $externalProjects = "OFF"
+        }
+
+        cmake -S "${{ github.workspace }}" -B output-fast -A x64 `
+          -DBUILD_TEAMTALK_LIBRARIES=OFF `
+          -DBUILD_TEAMTALK_SERVERS=OFF `
+          -DBUILD_TEAMTALK_DOCUMENTATION=OFF `
+          -DFEATURE_WEBRTC=OFF `
+          -DTOOLCHAIN_BUILD_EXTERNALPROJECTS=$externalProjects `
+          -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain
+
+    - name: Build TeamTalk client
+      working-directory: ${{ runner.workspace }}
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        cmake --build output-fast --parallel --config Release --target TeamTalk5
+        cmake --build output-fast --parallel --config Release --target QtTeamTalk5-windeploy-release
+
+    - name: Create portable and installer source
+      shell: pwsh
+      run: |
+        $stage = "${{ runner.workspace }}\teamtalk-pro-5.26.2-portable-win64"
+        $client = Join-Path $stage "Client"
+        $installerSource = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-source"
+
+        Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $installerSource -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $client | Out-Null
+
+        Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\TeamTalk5.exe" $client -Force
+
+        $dll = Get-ChildItem "${{ github.workspace }}\Library" -Filter "TeamTalk5.dll" -Recurse |
+          Where-Object { $_.FullName -notmatch "\\test\\" } |
+          Select-Object -First 1
+        if (-not $dll) {
+          throw "TeamTalk5.dll nao foi encontrado"
+        }
+        Copy-Item $dll.FullName $client -Force
+
+        if (-not (Test-Path "${{ github.workspace }}\Client\qtTeamTalk\windeployqt")) {
+          throw "Pasta windeployqt nao foi criada"
+        }
+        Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\windeployqt\*" $client -Recurse -Force
+
+        $languages = Join-Path $client "languages"
+        New-Item -ItemType Directory -Force -Path $languages | Out-Null
+        Get-ChildItem "${{ github.workspace }}\Client\qtTeamTalk\languages" -Filter "*.qm" -ErrorAction SilentlyContinue |
+          Copy-Item -Destination $languages
+
+        Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini") -Force
+        Copy-Item "${{ github.workspace }}\Setup\Client\Windows\TeamTalk5.ini" (Join-Path $client "TeamTalk5Pro.ini.default") -Force
+        Copy-Item "${{ github.workspace }}\Setup\Client\Sounds" (Join-Path $client "Sounds") -Recurse -Force
+        Copy-Item "${{ github.workspace }}\Setup\Installer\Windows\License.txt" (Join-Path $stage "License.txt") -Force
+
+        if (Test-Path (Join-Path $stage "Server")) {
+          throw "Erro: a pasta Server apareceu no portatil"
+        }
+
+        New-Item -ItemType Directory -Force -Path $installerSource | Out-Null
+        Copy-Item (Join-Path $client "*") $installerSource -Recurse -Force
+        Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
+
+    - name: Build independent installer
+      shell: pwsh
+      run: |
+        $installerSource = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-source"
+        $installerOut = "${{ runner.workspace }}\teamtalk-pro-5.26.2-installer-win64"
+        $iss = "${{ github.workspace }}\Setup\Installer\Windows\TeamTalkPro.iss"
+
+        Remove-Item $installerOut -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $installerOut | Out-Null
+
+        $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+        if (-not (Test-Path $iscc)) {
+          $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if ($cmd) {
+            $iscc = $cmd.Source
+          }
+        }
+        if (-not (Test-Path $iscc)) {
+          throw "ISCC.exe do Inno Setup nao foi encontrado"
+        }
+
+        $defineArg = "-dClientDir=$installerSource"
+        & $iscc $defineArg $iss
+        if ($LASTEXITCODE -ne 0) {
+          throw "Inno Setup falhou com codigo $LASTEXITCODE"
+        }
+
+        $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        if (-not (Test-Path $builtSetup)) {
+          throw "O instalador foi compilado, mas o EXE nao foi encontrado em: $builtSetup"
+        }
+
+        $setup = Join-Path $installerOut "TeamTalk_5_Pro_5.26.2_Setup_x64.exe"
+        Copy-Item $builtSetup $setup -Force
+        if (-not (Test-Path $setup)) {
+          throw "Falha ao copiar o instalador final para a pasta do artifact"
+        }
+
+    - name: Upload portable client
+      uses: actions/upload-artifact@v7
+      with:
+        name: teamtalk-pro-5.26.2-portable-win64
+        path: ${{ runner.workspace }}/teamtalk-pro-5.26.2-portable-win64
+        if-no-files-found: error
+
+    - name: Upload independent installer
+      uses: actions/upload-artifact@v7
+      with:
+        name: teamtalk-pro-5.26.2-installer-win64
+        path: ${{ runner.workspace }}/teamtalk-pro-5.26.2-installer-win64/TeamTalk_5_Pro_5.26.2_Setup_x64.exe
+        if-no-files-found: error
