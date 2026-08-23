@@ -27,6 +27,7 @@
 #include <QNetworkRequest>
 #include <QObject>
 #include <QProgressDialog>
+#include <QPushButton>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QString>
