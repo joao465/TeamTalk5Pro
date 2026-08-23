@@ -24,7 +24,7 @@ O objetivo deste fork é manter a base do TeamTalk compatível com o projeto ori
 
 O cliente verifica a última Release pública deste repositório usando a API do GitHub:
 
-`https://api.github.com/repos/joao465/TeamTalk5/releases/latest`
+`https://api.github.com/repos/joao465/TeamTalk5Pro/releases/latest`
 
 Quando uma versão mais nova é encontrada, o usuário recebe a mensagem:
 
@@ -197,8 +197,8 @@ O build automatizado atualmente usa Qt **6.11.1** e NASM **3.01**.
 ### Clonar
 
 ```bash
-git clone https://github.com/joao465/TeamTalk5.git
-cd TeamTalk5
+git clone https://github.com/joao465/TeamTalk5Pro.git
+cd TeamTalk5Pro
 git checkout teamtalk-pro-mic-eq
 git submodule update --init --recursive
 ```
