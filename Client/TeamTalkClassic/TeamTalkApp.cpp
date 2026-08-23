@@ -26,31 +26,26 @@
 #include "TeamTalkDlg.h"
 #include "AppInfo.h"
 #include "License.h"
+#include "ProNativeRuntime.h"
 #include <VersionHelpers.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-
-//////////////////////////////////////////////
-/// C functions for libraries
-
 extern "C"
 {
-
     LASTINPUT GetLastInputInfo_ = NULL;
 
     DWORD GetLastInput()
     {
         DWORD dwResult = 0;
-
         if(GetLastInputInfo_)
         {
             LASTINPUTINFO info;
             memset(&info, 0, sizeof(info));
             info.cbSize = sizeof(LASTINPUTINFO);
-            if( GetLastInputInfo_(&info))
+            if(GetLastInputInfo_(&info))
                 dwResult = info.dwTime;
             else
             {
@@ -60,26 +55,20 @@ extern "C"
         }
         return dwResult;
     }
-
 }
-
-///////////////////////////////////////////////////////////////////////
-// helper functions for IPC
 
 typedef struct
 {
-    HWND    hwnd;
-    LPCTSTR    title;
+    HWND hwnd;
+    LPCTSTR title;
 } FindWnd;
 
-
-BOOL CALLBACK CheckWindowTitle( HWND hwnd, LPARAM lParam )
+BOOL CALLBACK CheckWindowTitle(HWND hwnd, LPARAM lParam)
 {
-    TCHAR    buffer[MAX_PATH];
-    GetWindowText( hwnd, buffer, MAX_PATH );
-
-    FindWnd * fw = (FindWnd *)lParam;
-    if( _tcsncmp( buffer, fw->title, MAX_PATH ) == 0 )
+    TCHAR buffer[MAX_PATH];
+    GetWindowText(hwnd, buffer, MAX_PATH);
+    FindWnd* fw = (FindWnd*)lParam;
+    if(_tcsncmp(buffer, fw->title, MAX_PATH) == 0)
     {
         fw->hwnd = hwnd;
         return FALSE;
@@ -87,47 +76,33 @@ BOOL CALLBACK CheckWindowTitle( HWND hwnd, LPARAM lParam )
     return TRUE;
 }
 
-
-HWND FindWinTitle( LPCTSTR title )
+HWND FindWinTitle(LPCTSTR title)
 {
-    FindWnd    fw;
+    FindWnd fw;
     fw.hwnd = 0;
     fw.title = title;
-
-    EnumWindows( (WNDENUMPROC) CheckWindowTitle, (LPARAM) &fw );
+    EnumWindows((WNDENUMPROC)CheckWindowTitle, (LPARAM)&fw);
     return fw.hwnd;
 }
 
 BOOL IsWin2kPlus()
 {
-    //detect windows version
     return IsWindowsXPOrGreater();
 }
 
-void MyCommandLineInfo::ParseParam( LPCTSTR lpszParam, BOOL bFlag, BOOL bLast )
+void MyCommandLineInfo::ParseParam(LPCTSTR lpszParam, BOOL bFlag, BOOL bLast)
 {
     bFlag = bFlag;
+    bLast = bLast;
     m_args.AddTail(lpszParam);
 }
 
-// CTeamTalkApp
-
 BEGIN_MESSAGE_MAP(CTeamTalkApp, CWinApp)
-    //ON_COMMAND(ID_HELP, CWinApp::OnHelp)
 END_MESSAGE_MAP()
-
-
-// CTeamTalkApp construction
 
 CTeamTalkApp::CTeamTalkApp()
 {
-    //EnableHtmlHelp();
-
-    // Place all significant initialization in InitInstance
 }
-
-
-// The one and only CTeamTalkApp object
 
 CTeamTalkApp theApp;
 
@@ -136,23 +111,14 @@ const GUID CDECL BASED_CODE _tlid =
 const WORD _wVerMajor = 1;
 const WORD _wVerMinor = 0;
 
-
-// CTeamTalkApp initialization
-
 BOOL CTeamTalkApp::InitInstance()
 {
-	AfxOleInit();
-    // InitCommonControls() is required on Windows XP if an application
-    // manifest specifies use of ComCtl32.dll version 6 or later to enable
-    // visual styles.  Otherwise, any window creation will fail.
+    AfxOleInit();
     InitCommonControls();
-
     CWinApp::InitInstance();
-
     AfxEnableControlContainer();
 
     HMODULE hCoreMod = 0;
-    // Load keyboard hook
     if(IsWin2kPlus())
     {
         hCoreMod = LoadLibrary(_T("USER32.dll"));
@@ -160,24 +126,34 @@ BOOL CTeamTalkApp::InitInstance()
         ASSERT(GetLastInputInfo_);
     }
 
-    //load richedit
-    if(!AfxInitRichEdit2( ))
+    if(!AfxInitRichEdit2())
         AfxMessageBox(_T("Failed to initialize RichEdit component"));
 
     SetCurrentDirectory(GetExecutableFolder());
-
-    /* Set license information before creating the first client instance */
     TT_SetLicenseInformation(REGISTRATION_NAME, REGISTRATION_KEY);
 
-    // check whether an existing instance of TT is running an whether
-    // this instance has been passed a .tt file
     HWND hRunningTT = FindWinTitle(APPTITLE);
 
     MyCommandLineInfo info;
     ParseCommandLine(info);
 
+    // Dedicated, fully native settings window for TeamTalk Pro audio features.
+    for(POSITION p = info.m_args.GetHeadPosition(); p != NULL;)
+    {
+        CString arg = info.m_args.GetNext(p);
+        if(arg.CompareNoCase(_T("--pro-audio-settings")) == 0)
+        {
+            ProNativeRuntime::MigrateQtSettings();
+            ProNativeRuntime::ShowAudioSettings(NULL);
+            if(hCoreMod) FreeLibrary(hCoreMod);
+            return FALSE;
+        }
+    }
+
+    // One-time Qt -> native migration. The old INI is kept as a safety backup.
+    ProNativeRuntime::MigrateQtSettings();
+
     CString szArg;
-    //trim command line params for "
     if(hRunningTT && info.m_args.GetCount() == 1)
     {
         BOOL bTTUrl = FALSE;
@@ -186,18 +162,19 @@ BOOL CTeamTalkApp::InitInstance()
         {
             szArg = info.m_args.GetNext(pos);
             _tcsncat(msg.szPath, szArg.GetBuffer(), MAX_PATH);
-            _tcsncat(msg.szPath, _T("¤"), MAX_PATH);
+            _tcsncat(msg.szPath, _T("Â¤"), MAX_PATH);
             bTTUrl |= StartsWith(szArg, TTURL, FALSE);
-            bTTUrl |= EndsWith(szArg, _T( TTFILE_EXT ), FALSE);
+            bTTUrl |= EndsWith(szArg, _T(TTFILE_EXT), FALSE);
         }
 
         if(bTTUrl)
         {
-            COPYDATASTRUCT    cds;
+            COPYDATASTRUCT cds;
             cds.dwData = 0;
             cds.cbData = sizeof(msg);
             cds.lpData = &msg;
             ::SendMessage(hRunningTT, WM_COPYDATA, 0, (LPARAM)&cds);
+            if(hCoreMod) FreeLibrary(hCoreMod);
             return FALSE;
         }
     }
@@ -205,27 +182,27 @@ BOOL CTeamTalkApp::InitInstance()
     szArg.Empty();
     CTeamTalkDlg dlg;
     dlg.m_cmdArgs.AddHead(&info.m_args);
-
     m_pMainWnd = &dlg;
+
+    ProNativeRuntime::Start(&dlg);
     INT_PTR nResponse = dlg.DoModal();
-    if (nResponse == IDOK)
+    ProNativeRuntime::Stop();
+
+    if(nResponse == IDOK)
     {
-        //  dismissed with OK
     }
-    else if (nResponse == IDCANCEL)
+    else if(nResponse == IDCANCEL)
     {
-        //  dismissed with Cancel
     }
 
     if(hCoreMod)
         FreeLibrary(hCoreMod);
     hCoreMod = 0;
-    // Since the dialog has been closed, return FALSE so that we exit the
-    //  application, rather than start the application's message pump.
     return FALSE;
 }
 
 int CTeamTalkApp::ExitInstance()
 {
+    ProNativeRuntime::Stop();
     return CWinApp::ExitInstance();
 }
