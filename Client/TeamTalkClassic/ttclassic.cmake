@@ -67,6 +67,7 @@ set (TTCLASSIC_SOURCES
   HttpRequest.cpp
   Languages.cpp
   PlaySoundThread.cpp
+  ProNativeRuntime.cpp
   settings/ClientXML.cpp
   settings/MyStd.cpp
   settings/Settings.cpp
@@ -173,6 +174,7 @@ set (TTCLASSIC_HEADERS
   Languages.h
   License.h
   PlaySoundThread.h
+  ProNativeRuntime.h
   resource.h
   settings/ClientXML.h
   settings/MyStd.h
