@@ -36,18 +36,52 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
             throw "Versao invalida: $version. Use algo como 5.26.3"
           }
-          "PRO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Publishing TeamTalk Pro $version"
 
-      - name: Stamp application version
+          $parts = $version.Split('.')
+          $sdkVersion = "5.22.$($parts[2])"
+
+          "PRO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PRO_SDK_VERSION=$sdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Publishing TeamTalk Pro $version with SDK $sdkVersion"
+
+      - name: Stamp application and SDK version
         shell: pwsh
         run: |
-          $path = "Client/qtTeamTalk/appinfo.h"
-          $text = Get-Content $path -Raw
-          $replacement = '#define APPVERSION_SHORT    "' + $env:PRO_VERSION + '"'
-          $text = [regex]::Replace($text, '#define APPVERSION_SHORT\s+"[^"]+"', $replacement)
-          Set-Content -Path $path -Value $text -Encoding utf8NoBOM
-          Select-String -Path $path -Pattern 'APPVERSION_SHORT'
+          $appPath = "Client/qtTeamTalk/appinfo.h"
+          $appText = Get-Content $appPath -Raw
+          $appVersion = '#define APPVERSION_SHORT    "' + $env:PRO_VERSION + '"'
+          $appText = [regex]::Replace($appText, '#define APPVERSION_SHORT\s+"[^"]+"', $appVersion)
+          $appText = [regex]::Replace($appText, '#define CLIENTNAME\s+"[^"]+"', '#define CLIENTNAME          "TeamTalk5Pro"')
+          Set-Content -Path $appPath -Value $appText -Encoding utf8NoBOM
+
+          $mainPath = "Client/qtTeamTalk/mainwindow.cpp"
+          $mainText = Get-Content $mainPath -Raw
+          $mainText = [regex]::Replace(
+            $mainText,
+            'QString client = QString\("%1 \(%2\)"\)\.arg\(CLIENTNAME\)\.arg\(QSysInfo::prettyProductName\(\)\);',
+            'QString client = QString(CLIENTNAME);')
+          Set-Content -Path $mainPath -Value $mainText -Encoding utf8NoBOM
+
+          $sdkHeaderPath = "Library/TeamTalk_DLL/TeamTalk.h"
+          $sdkHeaderText = Get-Content $sdkHeaderPath -Raw
+          $sdkHeaderVersion = '#define TEAMTALK_VERSION "' + $env:PRO_SDK_VERSION + '"'
+          $sdkHeaderText = [regex]::Replace($sdkHeaderText, '#define TEAMTALK_VERSION\s+"[^"]+"', $sdkHeaderVersion)
+          Set-Content -Path $sdkHeaderPath -Value $sdkHeaderText -Encoding utf8NoBOM
+
+          $sdkDefsPath = "Library/TeamTalkLib/TeamTalkDefs.h"
+          $sdkDefsText = Get-Content $sdkDefsPath -Raw
+          $sdkParts = $env:PRO_SDK_VERSION.Split('.')
+          $sdkRcVersion = "$($sdkParts[0]),$($sdkParts[1]),$($sdkParts[2]),0"
+          $sdkRcFileVersion = "$($sdkParts[0]), $($sdkParts[1]), $($sdkParts[2]), 0"
+          $sdkDefsText = [regex]::Replace($sdkDefsText, '#define TEAMTALK_VERSION\s+"[^"]+"', '#define TEAMTALK_VERSION            "' + $env:PRO_SDK_VERSION + '"')
+          $sdkDefsText = [regex]::Replace($sdkDefsText, '#define TEAMTALK_RC_VERSION\s+[^\r\n]+', '#define TEAMTALK_RC_VERSION         ' + $sdkRcVersion)
+          $sdkDefsText = [regex]::Replace($sdkDefsText, '#define TEAMTALK_RC_FILEVERSION\s+"[^"]+"', '#define TEAMTALK_RC_FILEVERSION     "' + $sdkRcFileVersion + '"')
+          Set-Content -Path $sdkDefsPath -Value $sdkDefsText -Encoding utf8NoBOM
+
+          Select-String -Path $appPath -Pattern 'APPVERSION_SHORT|CLIENTNAME'
+          Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION'
+          Select-String -Path $sdkDefsPath -Pattern 'TEAMTALK_VERSION|TEAMTALK_RC_VERSION|TEAMTALK_RC_FILEVERSION'
+          Select-String -Path $mainPath -Pattern 'QString client = QString\(CLIENTNAME\);'
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -113,6 +147,7 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake --build output-pro-release --parallel --config Release --target TeamTalk5DLL
           cmake --build output-pro-release --parallel --config Release --target TeamTalk5
           cmake --build output-pro-release --parallel --config Release --target QtTeamTalk5-windeploy-release
 
@@ -132,13 +167,11 @@ jobs:
 
           Copy-Item "${{ github.workspace }}\Client\qtTeamTalk\TeamTalk5.exe" $client -Force
 
-          $dll = Get-ChildItem "${{ github.workspace }}\Library" -Filter "TeamTalk5.dll" -Recurse |
-            Where-Object { $_.FullName -notmatch "\\test\\" } |
-            Select-Object -First 1
-          if (-not $dll) {
-            throw "TeamTalk5.dll nao foi encontrado"
+          $dll = "${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk5.dll"
+          if (-not (Test-Path $dll)) {
+            throw "TeamTalk5.dll compilada nao foi encontrada em $dll"
           }
-          Copy-Item $dll.FullName $client -Force
+          Copy-Item $dll $client -Force
 
           if (-not (Test-Path "${{ github.workspace }}\Client\qtTeamTalk\windeployqt")) {
             throw "Pasta windeployqt nao foi criada"
@@ -208,6 +241,7 @@ jobs:
           generate_release_notes: true
           body: |
             TeamTalk 5 Pro ${{ env.PRO_VERSION }} para Windows x64.
+            SDK TeamTalk: ${{ env.PRO_SDK_VERSION }}.
 
             Esta Release e a fonte oficial usada pelo atualizador automatico deste fork.
             O instalador e o pacote portatil foram gerados automaticamente pelo GitHub Actions.
