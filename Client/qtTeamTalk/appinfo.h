@@ -34,9 +34,9 @@
 #define APPTRAYICON         QString::fromUtf8(":/images/images/teamtalky.png")
 #define APPTRAYICON_CON     QString::fromUtf8(":/images/images/teamtalk.png")
 #define APPTRAYICON_ACTIVE  QString::fromUtf8(":/images/images/teamtalkg.png")
-#define APPWEBSITE          "http://www.bearware.dk"
+#define APPWEBSITE          "https://github.com/joao465/TeamTalk5"
 
-#define APPTITLE            "TeamTalk 5 (Pro) (5.26.2)"
+#define APPTITLE            "TeamTalk 5 (Pro) (" APPVERSION ")"
 #define APPNAME_SHORT       "TeamTalk5"
 #define CLIENTNAME          "TeamTalk 5 (Pro)"
 // TeamTalk Pro identity used by the Windows client build.
@@ -74,7 +74,9 @@
 #define URL_PUBLISHSERVER(uid, token) QString("https://www.bearware.dk/teamtalk/tt5servers.php?client=" APPNAME_SHORT "&version=" APPVERSION_SHORT "&dllversion=" TEAMTALK_VERSION "&os=" OSTYPE "&action=publish&username=%1&token=%2").arg(uid).arg(token)
 #define URL_PUBLISHSERVER_JOINCODE(uid, token) QString("https://www.bearware.dk/teamtalk/tt5servers.php?client=" APPNAME_SHORT "&version=" APPVERSION_SHORT "&dllversion=" TEAMTALK_VERSION "&os=" OSTYPE "&action=publish&username=%1&token=%2&joincode=1").arg(uid).arg(token)
 #define URL_SERVER_JOINCODE(joincode) QString("https://www.bearware.dk/teamtalk/tt5servers.php?client=" APPNAME_SHORT "&version=" APPVERSION_SHORT "&dllversion=" TEAMTALK_VERSION "&os=" OSTYPE "&action=joincode&joincode=%3").arg(joincode)
-#define URL_APPUPDATE(beta)       QString("http://www.bearware.dk/teamtalk/tt5update.php?client=" APPNAME_SHORT "&version=" APPVERSION_SHORT "&dllversion=" TEAMTALK_VERSION "&os=" OSTYPE "&beta=%1").arg(beta ? "1" : "0")
+// The original XML updater remains in MainWindow for upstream compatibility,
+// but ProAutoUpdater handles the GitHub JSON response and the user-facing flow.
+#define URL_APPUPDATE(beta)       QString("https://api.github.com/repos/joao465/TeamTalk5/releases/latest")
 
 #define TTFILE_EXT          ".tt"
 #define TTFILE_ROOT         "teamtalk"
@@ -84,7 +86,7 @@
 #define WEBLOGIN_URL                            "https://www.bearware.dk/teamtalk/weblogin.php?client=" APPNAME_SHORT \
                                                 "&version=" APPVERSION_SHORT "&dllversion=" TEAMTALK_VERSION "&os=" OSTYPE
 #define WEBLOGIN_BEARWARE_URLAUTH(uid, passwd)  QString(WEBLOGIN_URL "&service=bearware&action=auth&username=%1&password=%2").arg(uid).arg(passwd)
-#define WEBLOGIN_BEARWARE_URLTOKEN(uid, token, accesstoken)  QString(WEBLOGIN_URL "&service=bearware&action=clientauth&username=%1&token=%2&accesstoken=%3").arg(uid).arg(token).arg(accesstoken)
+#define WEBLOGIN_BEARWARE_URLTOKEN(uid, token, accesstoken)  QString(WEBLOGIN_URL "&service=bearware.dk&action=clientauth&username=%1&token=%2&accesstoken=%3").arg(uid).arg(token).arg(accesstoken)
 #define WEBLOGIN_BEARWARE_USERNAME              "bearware"
 #define WEBLOGIN_BEARWARE_USERNAMEPOSTFIX       "@bearware.dk"
 
