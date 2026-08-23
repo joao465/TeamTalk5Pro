@@ -33,6 +33,10 @@ jobs:
           pathlib.Path('/tmp/secondary_patch.py').write_bytes(gzip.decompress(base64.b64decode(m.group(1))))
           PY
 
+      - name: Show original patch script
+        shell: bash
+        run: sed -n '1,320p' /tmp/secondary_patch.py
+
       - name: Prepare current source for patch
         shell: python
         run: |
