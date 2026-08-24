@@ -101,43 +101,52 @@ jobs:
 
       - name: Build native client with diagnostics
         working-directory: ${{ runner.workspace }}
+        shell: cmd
+        run: |
+          if not exist "${{ runner.workspace }}\native-build-diagnostics" mkdir "${{ runner.workspace }}\native-build-diagnostics"
+          set "BUILD_LOG=${{ runner.workspace }}\native-build-diagnostics\native-build.log"
+
+          call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat" > "%BUILD_LOG%" 2>&1
+          if errorlevel 1 goto :build_failed
+
+          echo ===== BUILD TeamTalk5DLL ===== >> "%BUILD_LOG%"
+          cmake --build output-native-test --parallel --config Release --target TeamTalk5DLL --verbose >> "%BUILD_LOG%" 2>&1
+          if errorlevel 1 goto :build_failed
+
+          echo ===== BUILD TeamTalk5Classic ===== >> "%BUILD_LOG%"
+          cmake --build output-native-test --parallel --config Release --target TeamTalk5Classic --verbose >> "%BUILD_LOG%" 2>&1
+          if errorlevel 1 goto :build_failed
+
+          echo ===== BUILD SUCCEEDED ===== >> "%BUILD_LOG%"
+          type "%BUILD_LOG%"
+          exit /b 0
+
+          :build_failed
+          set "BUILD_EXIT=%ERRORLEVEL%"
+          echo ===== BUILD FAILED WITH EXIT CODE %BUILD_EXIT% ===== >> "%BUILD_LOG%"
+          type "%BUILD_LOG%"
+          exit /b %BUILD_EXIT%
+
+      - name: Summarize native build errors
+        if: failure()
         shell: pwsh
         run: |
-          $diagnostics = Join-Path "${{ runner.workspace }}" "native-build-diagnostics"
-          New-Item -ItemType Directory -Force $diagnostics | Out-Null
-          $log = Join-Path $diagnostics "native-build.log"
-
-          $commands = @'
-          call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          if errorlevel 1 exit /b %errorlevel%
-          cmake --build output-native-test --parallel --config Release --target TeamTalk5DLL --verbose
-          if errorlevel 1 exit /b %errorlevel%
-          cmake --build output-native-test --parallel --config Release --target TeamTalk5Classic --verbose
-          exit /b %errorlevel%
-          '@
-
-          cmd.exe /d /c $commands 2>&1 | Tee-Object -FilePath $log
-          $buildExitCode = $LASTEXITCODE
-
-          if ($buildExitCode -ne 0) {
-            Write-Host ""
-            Write-Host "===== BUILD FAILED: LIKELY ERRORS ====="
-            $patterns = 'error C[0-9]+|fatal error|LNK[0-9]+|MSB[0-9]+|CMake Error|FAILED:|ninja: error'
+          $log = "${{ runner.workspace }}\native-build-diagnostics\native-build.log"
+          if (Test-Path $log) {
+            Write-Host "===== LIKELY BUILD ERRORS ====="
+            $patterns = 'error C[0-9]+|fatal error|LNK[0-9]+|MSB[0-9]+|CMake Error|FAILED:|ninja: error|error:'
             $matches = Select-String -Path $log -Pattern $patterns -CaseSensitive:$false
-
             if ($matches) {
-              $matches | Select-Object -Last 120 | ForEach-Object { Write-Host $_.Line }
+              $matches | Select-Object -Last 160 | ForEach-Object { Write-Host $_.Line }
             }
             else {
-              Write-Host "No standard compiler error signature was found. Last 200 log lines:"
-              Get-Content $log -Tail 200
+              Write-Host "No standard compiler error signature found. Last 250 log lines:"
+              Get-Content $log -Tail 250
             }
-
-            Write-Host "Full log saved to: $log"
-            exit $buildExitCode
           }
-
-          Write-Host "Native client build completed successfully."
+          else {
+            Write-Host "No native-build.log exists because the failure happened before the build step."
+          }
 
       - name: Upload native build diagnostics
         if: always()
@@ -153,7 +162,10 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          if not exist "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" exit /b 1
+          if not exist "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" (
+            echo ERROR: TeamTalk5.exe was not produced by the native build.
+            exit /b 1
+          )
           dumpbin /DEPENDENTS "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" > native-dependencies.txt
           findstr /I "Qt5 Qt6 QtCore QtGui QtWidgets" native-dependencies.txt >nul
           if not errorlevel 1 (
