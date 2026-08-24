@@ -101,31 +101,58 @@ jobs:
 
       - name: Build native client with diagnostics
         working-directory: ${{ runner.workspace }}
-        shell: cmd
+        shell: pwsh
         run: |
-          if not exist "${{ runner.workspace }}\native-build-diagnostics" mkdir "${{ runner.workspace }}\native-build-diagnostics"
-          set "BUILD_LOG=${{ runner.workspace }}\native-build-diagnostics\native-build.log"
+          $diagnostics = Join-Path "${{ runner.workspace }}" "native-build-diagnostics"
+          New-Item -ItemType Directory -Force $diagnostics | Out-Null
+          $log = Join-Path $diagnostics "native-build.log"
+          Set-Content -Path $log -Value "TeamTalk Pro Native diagnostic build`r`nRun ID: ${{ github.run_id }}`r`nCommit: ${{ github.sha }}`r`n" -Encoding utf8
 
-          call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat" > "%BUILD_LOG%" 2>&1
-          if errorlevel 1 goto :build_failed
+          $vcvars = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat'
 
-          echo ===== BUILD TeamTalk5DLL ===== >> "%BUILD_LOG%"
-          cmake --build output-native-test --parallel --config Release --target TeamTalk5DLL --verbose >> "%BUILD_LOG%" 2>&1
-          if errorlevel 1 goto :build_failed
+          function Invoke-NativeBuild {
+            param(
+              [Parameter(Mandatory=$true)][string]$Label,
+              [Parameter(Mandatory=$true)][string]$Target
+            )
 
-          echo ===== BUILD TeamTalk5Classic ===== >> "%BUILD_LOG%"
-          cmake --build output-native-test --parallel --config Release --target TeamTalk5Classic --verbose >> "%BUILD_LOG%" 2>&1
-          if errorlevel 1 goto :build_failed
+            $header = "===== BUILD $Label ====="
+            Write-Host $header
+            Add-Content -Path $log -Value $header -Encoding utf8
 
-          echo ===== BUILD SUCCEEDED ===== >> "%BUILD_LOG%"
-          type "%BUILD_LOG%"
-          exit /b 0
+            $command = "call `"$vcvars`" && cmake --build output-native-test --parallel --config Release --target $Target --verbose"
 
-          :build_failed
-          set "BUILD_EXIT=%ERRORLEVEL%"
-          echo ===== BUILD FAILED WITH EXIT CODE %BUILD_EXIT% ===== >> "%BUILD_LOG%"
-          type "%BUILD_LOG%"
-          exit /b %BUILD_EXIT%
+            # Capture the child process output in memory. Nothing opens native-build.log
+            # while CMake/MSBuild is running, so there is no file-handle contention.
+            $output = & $env:ComSpec /d /s /c $command 2>&1
+            $exitCode = $LASTEXITCODE
+
+            if ($output) {
+              $output | ForEach-Object { Write-Host $_ }
+              $output | Out-File -FilePath $log -Append -Encoding utf8
+            }
+
+            $footer = "===== $Label EXIT CODE: $exitCode ====="
+            Write-Host $footer
+            Add-Content -Path $log -Value $footer -Encoding utf8
+
+            return $exitCode
+          }
+
+          $dllExit = Invoke-NativeBuild -Label "TeamTalk5DLL" -Target "TeamTalk5DLL"
+          if ($dllExit -ne 0) {
+            Write-Host "TeamTalk5DLL build failed. Full log: $log"
+            exit $dllExit
+          }
+
+          $classicExit = Invoke-NativeBuild -Label "TeamTalk5Classic" -Target "TeamTalk5Classic"
+          if ($classicExit -ne 0) {
+            Write-Host "TeamTalk5Classic build failed. Full log: $log"
+            exit $classicExit
+          }
+
+          Add-Content -Path $log -Value "===== BUILD SUCCEEDED =====" -Encoding utf8
+          Write-Host "Native client build completed successfully."
 
       - name: Summarize native build errors
         if: failure()
