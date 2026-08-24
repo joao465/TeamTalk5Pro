@@ -2,6 +2,10 @@ name: Publish TeamTalk Pro Release
 
 on:
   push:
+    branches:
+      - "teamtalk-pro-mic-eq"
+    paths:
+      - ".github/workflows/publish-pro-release.yml"
     tags:
       - "pro-v*"
   workflow_dispatch:
@@ -30,7 +34,17 @@ jobs:
         run: |
           $version = "${{ inputs.version }}"
           if ([string]::IsNullOrWhiteSpace($version)) {
-            $version = "${{ github.ref_name }}" -replace '^pro-v', ''
+            if ("${{ github.ref_type }}" -eq "tag") {
+              $version = "${{ github.ref_name }}" -replace '^pro-v', ''
+            } else {
+              $appPath = "Client/TeamTalkClassic/AppInfo.h"
+              $appText = Get-Content $appPath -Raw
+              $versionMatch = [regex]::Match($appText, '#define\s+APPVERSION_SHORT\s+_T\("([^"]+)"\)')
+              if (-not $versionMatch.Success) {
+                throw "Nao foi possivel detectar APPVERSION_SHORT em $appPath"
+              }
+              $version = $versionMatch.Groups[1].Value
+            }
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
             throw "Versao invalida: $version"
@@ -46,7 +60,7 @@ jobs:
 
           "PRO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PRO_SDK_VERSION=$sdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Publishing native TeamTalk Pro $version with SDK $sdkVersion"
+          Write-Host "Building native TeamTalk Pro $version with SDK $sdkVersion"
 
       - name: Stamp native application and SDK version
         shell: pwsh
@@ -107,10 +121,16 @@ jobs:
             teamtalk-pro-release-toolchain-win64-
             teamtalk-toolchain-win64-
 
-      - name: Configure native release build
+      - name: Configure native release build with diagnostics
         working-directory: ${{ runner.workspace }}
         shell: pwsh
         run: |
+          $diagDir = Join-Path $env:GITHUB_WORKSPACE "official-diagnostics"
+          $logFile = Join-Path $diagDir "native-build.log"
+          $summaryFile = Join-Path $diagDir "native-error-summary.txt"
+          New-Item -ItemType Directory -Path $diagDir -Force | Out-Null
+          "===== Configure native TeamTalk Pro $env:PRO_VERSION =====" | Set-Content -Path $logFile -Encoding utf8
+
           $externalProjects = "ON"
           if ("${{ steps.toolchain-cache.outputs.cache-hit }}" -eq "true") {
             $externalProjects = "OFF"
@@ -124,15 +144,85 @@ jobs:
             -DBUILD_TEAMTALK_CLIENT_PRISM=ON `
             -DFEATURE_WEBRTC=OFF `
             -DTOOLCHAIN_BUILD_EXTERNALPROJECTS=$externalProjects `
-            -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain
+            -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain `
+            2>&1 | Tee-Object -FilePath $logFile -Append
+          $configureExitCode = $LASTEXITCODE
 
-      - name: Build native TeamTalk Pro client and SDK DLL
+          if ($configureExitCode -ne 0) {
+            $errorLines = Get-Content $logFile | Where-Object { $_ -match 'error|fatal|LNK[0-9]{4}|C[0-9]{4}|MSB[0-9]{4}|ninja: build stopped' }
+            if ($errorLines) {
+              $errorLines | Set-Content -Path $summaryFile -Encoding utf8
+            } else {
+              Get-Content $logFile -Tail 250 | Set-Content -Path $summaryFile -Encoding utf8
+            }
+            Write-Host "::group::Native configure failure - last 250 log lines"
+            Get-Content $logFile -Tail 250
+            Write-Host "::endgroup::"
+            exit $configureExitCode
+          }
+
+      - name: Build native TeamTalk Pro client and SDK DLL with diagnostics
         working-directory: ${{ runner.workspace }}
-        shell: cmd
+        shell: pwsh
         run: |
-          call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5DLL
-          cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5Classic
+          $diagDir = Join-Path $env:GITHUB_WORKSPACE "official-diagnostics"
+          $logFile = Join-Path $diagDir "native-build.log"
+          $summaryFile = Join-Path $diagDir "native-error-summary.txt"
+          New-Item -ItemType Directory -Path $diagDir -Force | Out-Null
+
+          $vcvars = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          if (-not (Test-Path $vcvars)) {
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vswhere) {
+              $vsInstall = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1)
+              if ($vsInstall) {
+                $vcvars = Join-Path $vsInstall "VC\Auxiliary\Build\vcvars64.bat"
+              }
+            }
+          }
+          if (-not (Test-Path $vcvars)) {
+            "fatal: vcvars64.bat was not found" | Tee-Object -FilePath $logFile -Append
+            "fatal: vcvars64.bat was not found" | Set-Content -Path $summaryFile -Encoding utf8
+            exit 1
+          }
+
+          function Write-FailureSummary {
+            param([int]$ExitCode, [string]$Stage)
+            $errorLines = Get-Content $logFile | Where-Object { $_ -match 'error|fatal|LNK[0-9]{4}|C[0-9]{4}|MSB[0-9]{4}|ninja: build stopped' }
+            if ($errorLines) {
+              @("Stage: $Stage", "Exit code: $ExitCode", "") + $errorLines | Set-Content -Path $summaryFile -Encoding utf8
+            } else {
+              @("Stage: $Stage", "Exit code: $ExitCode", "") + (Get-Content $logFile -Tail 250) | Set-Content -Path $summaryFile -Encoding utf8
+            }
+            Write-Host "::group::$Stage failure - last 250 log lines"
+            Get-Content $logFile -Tail 250
+            Write-Host "::endgroup::"
+          }
+
+          "===== Build TeamTalk5DLL --verbose =====" | Tee-Object -FilePath $logFile -Append
+          $dllCommand = "call `"$vcvars`" && cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5DLL --verbose"
+          & cmd.exe /d /s /c $dllCommand 2>&1 | Tee-Object -FilePath $logFile -Append
+          $dllExitCode = $LASTEXITCODE
+          if ($dllExitCode -ne 0) {
+            Write-FailureSummary -ExitCode $dllExitCode -Stage "TeamTalk5DLL"
+            exit $dllExitCode
+          }
+
+          "===== Build TeamTalk5Classic --verbose =====" | Tee-Object -FilePath $logFile -Append
+          $clientCommand = "call `"$vcvars`" && cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5Classic --verbose"
+          & cmd.exe /d /s /c $clientCommand 2>&1 | Tee-Object -FilePath $logFile -Append
+          $clientExitCode = $LASTEXITCODE
+          if ($clientExitCode -ne 0) {
+            Write-FailureSummary -ExitCode $clientExitCode -Stage "TeamTalk5Classic"
+            exit $clientExitCode
+          }
+
+          @(
+            "TeamTalk Pro official native build succeeded.",
+            "Version: $env:PRO_VERSION",
+            "SDK: $env:PRO_SDK_VERSION",
+            "Commit: $env:GITHUB_SHA"
+          ) | Set-Content -Path (Join-Path $diagDir "build-success.txt") -Encoding utf8
 
       - name: Verify release contains no Qt runtime
         shell: pwsh
@@ -213,6 +303,15 @@ jobs:
           if (-not (Test-Path $builtSetup)) { throw "Instalador nao encontrado: $builtSetup" }
           Copy-Item $builtSetup (Join-Path $assets $setupName) -Force
 
+      - name: Upload official build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: teamtalk-pro-${{ env.PRO_VERSION }}-official-build-diagnostics
+          path: official-diagnostics/*
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload release build artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -221,6 +320,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/pro-v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pro-v${{ env.PRO_VERSION }}
