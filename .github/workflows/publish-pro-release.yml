@@ -24,6 +24,8 @@ permissions:
 jobs:
   windows-release:
     runs-on: windows-latest
+    env:
+      PRO_BUILD_DIR: C:\ttb
 
     steps:
       - name: Checkout source
@@ -78,6 +80,7 @@ jobs:
           "PRO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PRO_SDK_VERSION=$sdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Building native TeamTalk Pro $version with SDK $sdkVersion"
+          Write-Host "Short native build directory: $env:PRO_BUILD_DIR"
 
       - name: Stamp native application and SDK version
         shell: pwsh
@@ -146,14 +149,17 @@ jobs:
           $logFile = Join-Path $diagDir "native-build.log"
           $summaryFile = Join-Path $diagDir "native-error-summary.txt"
           New-Item -ItemType Directory -Path $diagDir -Force | Out-Null
+          Remove-Item $env:PRO_BUILD_DIR -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $env:PRO_BUILD_DIR -Force | Out-Null
           "===== Configure native TeamTalk Pro $env:PRO_VERSION =====" | Set-Content -Path $logFile -Encoding utf8
+          "Build directory: $env:PRO_BUILD_DIR" | Tee-Object -FilePath $logFile -Append
 
           $externalProjects = "ON"
           if ("${{ steps.toolchain-cache.outputs.cache-hit }}" -eq "true") {
             $externalProjects = "OFF"
           }
 
-          cmake -S "${{ github.workspace }}" -B output-pro-native-release -A x64 `
+          cmake -S "${{ github.workspace }}" -B "$env:PRO_BUILD_DIR" -A x64 `
             -DBUILD_TEAMTALK_LIBRARIES=OFF `
             -DBUILD_TEAMTALK_SERVERS=OFF `
             -DBUILD_TEAMTALK_DOCUMENTATION=OFF `
@@ -217,7 +223,7 @@ jobs:
           }
 
           "===== Build TeamTalk5DLL --verbose =====" | Tee-Object -FilePath $logFile -Append
-          $dllCommand = "call `"$vcvars`" && cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5DLL --verbose"
+          $dllCommand = "call `"$vcvars`" && cmake --build `"$env:PRO_BUILD_DIR`" --parallel --config Release --target TeamTalk5DLL --verbose"
           & cmd.exe /d /s /c $dllCommand 2>&1 | Tee-Object -FilePath $logFile -Append
           $dllExitCode = $LASTEXITCODE
           if ($dllExitCode -ne 0) {
@@ -226,7 +232,7 @@ jobs:
           }
 
           "===== Build TeamTalk5Classic --verbose =====" | Tee-Object -FilePath $logFile -Append
-          $clientCommand = "call `"$vcvars`" && cmake --build output-pro-native-release --parallel --config Release --target TeamTalk5Classic --verbose"
+          $clientCommand = "call `"$vcvars`" && cmake --build `"$env:PRO_BUILD_DIR`" --parallel --config Release --target TeamTalk5Classic --verbose"
           & cmd.exe /d /s /c $clientCommand 2>&1 | Tee-Object -FilePath $logFile -Append
           $clientExitCode = $LASTEXITCODE
           if ($clientExitCode -ne 0) {
@@ -238,7 +244,8 @@ jobs:
             "TeamTalk Pro official native build succeeded.",
             "Version: $env:PRO_VERSION",
             "SDK: $env:PRO_SDK_VERSION",
-            "Commit: $env:GITHUB_SHA"
+            "Commit: $env:GITHUB_SHA",
+            "Build directory: $env:PRO_BUILD_DIR"
           ) | Set-Content -Path (Join-Path $diagDir "build-success.txt") -Encoding utf8
 
       - name: Verify release contains no Qt runtime
@@ -281,7 +288,7 @@ jobs:
           Get-ChildItem "${{ github.workspace }}\Library\TeamTalk_DLL" -Filter "*.h" | Copy-Item -Destination $sdkInclude
           Copy-Item "${{ github.workspace }}\Library\TeamTalkLib\TeamTalkDefs.h" $sdkInclude -Force
           Copy-Item "${{ github.workspace }}\Library\TeamTalk_DLL\TeamTalk5.dll" $sdkBin -Force
-          $importLib = Get-ChildItem "${{ github.workspace }}" -Filter "TeamTalk5.lib" -Recurse -ErrorAction SilentlyContinue |
+          $importLib = Get-ChildItem @("${{ github.workspace }}", $env:PRO_BUILD_DIR) -Filter "TeamTalk5.lib" -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -notmatch "\\test\\" } | Select-Object -First 1
           if ($importLib) { Copy-Item $importLib.FullName $sdkLib -Force }
           @(
