@@ -83,15 +83,60 @@ jobs:
             -DTOOLCHAIN_BUILD_EXTERNALPROJECTS=$externalProjects `
             -DTOOLCHAIN_INSTALL_PREFIX=${{ runner.workspace }}/install-toolchain
 
-      - name: Build and verify native client
+      - name: Build native client with diagnostics
+        working-directory: ${{ runner.workspace }}
+        shell: pwsh
+        run: |
+          $diagnostics = Join-Path "${{ runner.workspace }}" "native-build-diagnostics"
+          New-Item -ItemType Directory -Force $diagnostics | Out-Null
+          $log = Join-Path $diagnostics "native-build.log"
+
+          $commands = @'
+          call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b %errorlevel%
+          cmake --build output-native-test --parallel --config Release --target TeamTalk5DLL --verbose
+          if errorlevel 1 exit /b %errorlevel%
+          cmake --build output-native-test --parallel --config Release --target TeamTalk5Classic --verbose
+          exit /b %errorlevel%
+          '@
+
+          cmd.exe /d /c $commands 2>&1 | Tee-Object -FilePath $log
+          $buildExitCode = $LASTEXITCODE
+
+          if ($buildExitCode -ne 0) {
+            Write-Host ""
+            Write-Host "===== BUILD FAILED: LIKELY ERRORS ====="
+            $patterns = 'error C[0-9]+|fatal error|LNK[0-9]+|MSB[0-9]+|CMake Error|FAILED:|ninja: error'
+            $matches = Select-String -Path $log -Pattern $patterns -CaseSensitive:$false
+
+            if ($matches) {
+              $matches | Select-Object -Last 120 | ForEach-Object { Write-Host $_.Line }
+            }
+            else {
+              Write-Host "No standard compiler error signature was found. Last 200 log lines:"
+              Get-Content $log -Tail 200
+            }
+
+            Write-Host "Full log saved to: $log"
+            exit $buildExitCode
+          }
+
+          Write-Host "Native client build completed successfully."
+
+      - name: Upload native build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-build-diagnostics-${{ github.run_id }}
+          path: ${{ runner.workspace }}/native-build-diagnostics
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify native client contains no Qt runtime
         working-directory: ${{ runner.workspace }}
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          cmake --build output-native-test --parallel --config Release --target TeamTalk5DLL
-          if errorlevel 1 exit /b 1
-          cmake --build output-native-test --parallel --config Release --target TeamTalk5Classic
-          if errorlevel 1 exit /b 1
           if not exist "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" exit /b 1
           dumpbin /DEPENDENTS "${{ github.workspace }}\Client\TeamTalkClassic\TeamTalk5.exe" > native-dependencies.txt
           findstr /I "Qt5 Qt6 QtCore QtGui QtWidgets" native-dependencies.txt >nul
