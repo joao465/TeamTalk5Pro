@@ -1,5 +1,6 @@
 name: Publish TeamTalk Pro Release
 
+# Diagnostic branch runs compile and package the official native build without publishing a GitHub Release.
 on:
   push:
     branches:
