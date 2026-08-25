@@ -551,7 +551,7 @@ namespace
             GetClientRect(sheet, &client);
             SetWindowPos(hwnd, nullptr, 0, 0,
                          page.right - page.left,
-                         std::max(320, client.bottom - 70),
+                         std::max<LONG>(320, client.bottom - 70),
                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
 
