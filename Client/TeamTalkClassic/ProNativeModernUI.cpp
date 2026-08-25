@@ -28,7 +28,7 @@ namespace
         EnumChildWindows(owner, [](HWND child, LPARAM) -> BOOL
         {
             wchar_t cls[64] = {};
-            GetClassNameW(child, cls, static_cast<int>(std::size(cls)));
+            GetClassNameW(child, cls, static_cast<int>(_countof(cls)));
 
             if (_wcsicmp(cls, WC_TREEVIEWW) == 0 || _wcsicmp(cls, WC_LISTVIEWW) == 0)
                 SetWindowTheme(child, L"Explorer", nullptr);
