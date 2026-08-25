@@ -66,8 +66,8 @@ set (TTCLASSIC_SOURCES
   Helper.cpp
   HttpRequest.cpp
   Languages.cpp
+  NativeWindowsUI.cpp
   PlaySoundThread.cpp
-  ProNativeModernUI.cpp
   ProNativeRuntime.cpp
   settings/ClientXML.cpp
   settings/MyStd.cpp
@@ -95,7 +95,6 @@ set (TTCLASSIC_SOURCES
   res/bmp00003.bmp
   res/bmp00004.bmp
   res/bmp00005.bmp
-  res/bmp00006.bmp
   res/icon1.ico
   res/logo.bmp
   res/session.bmp
@@ -174,8 +173,8 @@ set (TTCLASSIC_HEADERS
   HttpRequest.h
   Languages.h
   License.h
+  NativeWindowsUI.h
   PlaySoundThread.h
-  ProNativeModernUI.h
   ProNativeRuntime.h
   resource.h
   settings/ClientXML.h
