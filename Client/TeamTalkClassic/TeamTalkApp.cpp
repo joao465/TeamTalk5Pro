@@ -27,7 +27,7 @@
 #include "AppInfo.h"
 #include "License.h"
 #include "ProNativeRuntime.h"
-#include "ProNativeModernUI.h"
+#include "NativeWindowsUI.h"
 #include <VersionHelpers.h>
 
 #ifdef _DEBUG
@@ -108,7 +108,7 @@ CTeamTalkApp::CTeamTalkApp()
 CTeamTalkApp theApp;
 
 const GUID CDECL BASED_CODE _tlid =
-{ 0xBC4E1CC0, 0x8B80, 0x4BD4, { 0x85, 0xC3, 0xD1, 0xAC, 0x38, 0x6A, 0x29, 0xB8 } };
+{ 0xBC4E1CC0, 0x8B80, 0x4BD4, { 0x85, 0xC3, 0xD1, 0xAC, 0x38, 0x6A, 0x29, 0xB8 } } };
 const WORD _wVerMajor = 1;
 const WORD _wVerMinor = 0;
 
@@ -138,7 +138,8 @@ BOOL CTeamTalkApp::InitInstance()
     MyCommandLineInfo info;
     ParseCommandLine(info);
 
-    // Dedicated, fully native settings window for TeamTalk Pro audio features.
+    // Keep the diagnostic command-line entry point. Normal users configure
+    // these settings inline on the Sound System preferences page.
     for(POSITION p = info.m_args.GetHeadPosition(); p != NULL;)
     {
         CString arg = info.m_args.GetNext(p);
@@ -186,9 +187,12 @@ BOOL CTeamTalkApp::InitInstance()
     m_pMainWnd = &dlg;
 
     ProNativeRuntime::Start(&dlg);
-    ProNativeModernUI::Start(&dlg);
+    // Install the native UI hook on this same MFC UI thread. Unlike the old
+    // experimental implementation, no worker thread mutates HWNDs and no
+    // separate "TeamTalk Pro" menu is injected.
+    NativeWindowsUI::Start();
     INT_PTR nResponse = dlg.DoModal();
-    ProNativeModernUI::Stop();
+    NativeWindowsUI::Stop();
     ProNativeRuntime::Stop();
 
     if(nResponse == IDOK)
@@ -206,7 +210,7 @@ BOOL CTeamTalkApp::InitInstance()
 
 int CTeamTalkApp::ExitInstance()
 {
-    ProNativeModernUI::Stop();
+    NativeWindowsUI::Stop();
     ProNativeRuntime::Stop();
     return CWinApp::ExitInstance();
 }
