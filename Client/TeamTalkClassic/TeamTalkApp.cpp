@@ -27,6 +27,7 @@
 #include "AppInfo.h"
 #include "License.h"
 #include "ProNativeRuntime.h"
+#include "ProNativeModernUI.h"
 #include <VersionHelpers.h>
 
 #ifdef _DEBUG
@@ -185,7 +186,9 @@ BOOL CTeamTalkApp::InitInstance()
     m_pMainWnd = &dlg;
 
     ProNativeRuntime::Start(&dlg);
+    ProNativeModernUI::Start(&dlg);
     INT_PTR nResponse = dlg.DoModal();
+    ProNativeModernUI::Stop();
     ProNativeRuntime::Stop();
 
     if(nResponse == IDOK)
@@ -203,6 +206,7 @@ BOOL CTeamTalkApp::InitInstance()
 
 int CTeamTalkApp::ExitInstance()
 {
+    ProNativeModernUI::Stop();
     ProNativeRuntime::Stop();
     return CWinApp::ExitInstance();
 }
