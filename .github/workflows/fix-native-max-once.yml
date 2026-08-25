@@ -1,0 +1,45 @@
+name: Fix Native Max Once
+
+on:
+  push:
+    branches:
+      - fix-native-max-once-20260825
+
+permissions:
+  contents: write
+
+jobs:
+  patch-target-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v7
+        with:
+          ref: teamtalk-pro-mic-eq
+          fetch-depth: 0
+
+      - name: Apply focused NativeWindowsUI fix
+        shell: pwsh
+        run: |
+          $path = 'Client/TeamTalkClassic/NativeWindowsUI.cpp'
+          $old = 'std::max(320, client.bottom - 70)'
+          $new = 'std::max<LONG>(320, client.bottom - 70)'
+          $text = [System.IO.File]::ReadAllText($path)
+          $count = ([regex]::Matches($text, [regex]::Escape($old))).Count
+          if ($count -ne 1) {
+            throw "Expected exactly one target expression, found $count"
+          }
+          $text = $text.Replace($old, $new)
+          [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
+
+      - name: Commit fix to test branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Client/TeamTalkClassic/NativeWindowsUI.cpp
+          git diff --cached --check
+          git diff --cached -- Client/TeamTalkClassic/NativeWindowsUI.cpp
+          git commit -m "Fix native sound page max type"
+          git push origin HEAD:teamtalk-pro-mic-eq
