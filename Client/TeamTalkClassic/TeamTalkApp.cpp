@@ -29,6 +29,7 @@
 #include "ProNativeRuntime.h"
 #include "NativeWindowsUI.h"
 #include "NativeParityFeatures.h"
+#include "NativeAccessibilityFeatures.h"
 #include <VersionHelpers.h>
 
 #ifdef _DEBUG
@@ -188,12 +189,14 @@ BOOL CTeamTalkApp::InitInstance()
     m_pMainWnd = &dlg;
 
     ProNativeRuntime::Start(&dlg);
-    // Install the native UI hook on this same MFC UI thread. Unlike the old
+    // Install the native UI hooks on this same MFC UI thread. Unlike the old
     // experimental implementation, no worker thread mutates HWNDs and no
     // separate "TeamTalk Pro" menu is injected.
     NativeWindowsUI::Start();
     NativeParityFeatures::Start();
+    NativeAccessibilityFeatures::Start();
     INT_PTR nResponse = dlg.DoModal();
+    NativeAccessibilityFeatures::Stop();
     NativeParityFeatures::Stop();
     NativeWindowsUI::Stop();
     ProNativeRuntime::Stop();
@@ -213,6 +216,7 @@ BOOL CTeamTalkApp::InitInstance()
 
 int CTeamTalkApp::ExitInstance()
 {
+    NativeAccessibilityFeatures::Stop();
     NativeParityFeatures::Stop();
     NativeWindowsUI::Stop();
     ProNativeRuntime::Stop();
