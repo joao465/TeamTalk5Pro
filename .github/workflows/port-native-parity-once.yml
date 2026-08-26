@@ -1,0 +1,114 @@
+name: Port Native Parity Once
+
+on:
+  push:
+    branches:
+      - native-parity-list-unofficial-20260826
+
+permissions:
+  contents: write
+
+jobs:
+  patch-target:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v7
+        with:
+          ref: teamtalk-pro-mic-eq
+          fetch-depth: 0
+
+      - name: Apply native parity integration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              with p.open('r', encoding='utf-8', newline='') as f:
+                  text = f.read()
+              nl = '\r\n' if '\r\n' in text else '\n'
+              old = old.replace('\n', nl)
+              new = new.replace('\n', nl)
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one match, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+              with p.open('w', encoding='utf-8', newline='') as f:
+                  f.write(text)
+
+          replace_once(
+              'Client/TeamTalkClassic/TeamTalkApp.cpp',
+              '#include "NativeWindowsUI.h"\n#include <VersionHelpers.h>',
+              '#include "NativeWindowsUI.h"\n#include "NativeParityFeatures.h"\n#include <VersionHelpers.h>')
+
+          replace_once(
+              'Client/TeamTalkClassic/TeamTalkApp.cpp',
+              '    NativeWindowsUI::Start();\n    INT_PTR nResponse = dlg.DoModal();\n    NativeWindowsUI::Stop();',
+              '    NativeWindowsUI::Start();\n    NativeParityFeatures::Start();\n    INT_PTR nResponse = dlg.DoModal();\n    NativeParityFeatures::Stop();\n    NativeWindowsUI::Stop();')
+
+          replace_once(
+              'Client/TeamTalkClassic/TeamTalkApp.cpp',
+              'int CTeamTalkApp::ExitInstance()\n{\n    NativeWindowsUI::Stop();',
+              'int CTeamTalkApp::ExitInstance()\n{\n    NativeParityFeatures::Stop();\n    NativeWindowsUI::Stop();')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.h',
+              '    void ShowPublicServers();\n    BOOL GetHostEntry(teamtalk::HostEntry& entry);',
+              '    void ShowPublicServers();\n    void StartServerListRequest(BOOL unofficial);\n    BOOL GetHostEntry(teamtalk::HostEntry& entry);')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.h',
+              '    BOOL m_bPubServers;\n    afx_msg void OnBnClickedCheckPublicservers();',
+              '    BOOL m_bPubServers;\n    BOOL m_bServerListRequestUnofficial;\n    BOOL m_bPendingUnofficialServers;\n    afx_msg void OnBnClickedCheckPublicservers();')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.cpp',
+              '#include "AppInfo.h"\n',
+              '#include "AppInfo.h"\n#include "NativeParityFeatures.h"\n')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.cpp',
+              '    , m_bPubServers(FALSE)\n    , m_bEncrypted(FALSE)',
+              '    , m_bPubServers(FALSE)\n    , m_bServerListRequestUnofficial(FALSE)\n    , m_bPendingUnofficialServers(FALSE)\n    , m_bEncrypted(FALSE)')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.cpp',
+              '    if(m_bPubServers)\n        ShowPublicServers();',
+              '    if(m_bPubServers || NativeParityFeatures::ShowUnofficialServers())\n        ShowPublicServers();')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.cpp',
+              '                int i=0;\n                HostEntry entry;\n                while(ttfile.GetHostEntry(entry, i++))\n                {\n                    m_pubservers.push_back(entry);\n                    int newindex = m_wndHosts.AddString(CString(LoadText(IDS_HOSTMANAGERPUBLIC, _T("Public: "))) \n                        + STR_UTF8(entry.szEntryName.c_str()));\n                    m_wndHosts.SetItemData(newindex, PUBSERVER_ITEMDATA);\n                }',
+              '                int i=0;\n                HostEntry entry;\n                CString prefix = m_bServerListRequestUnofficial ? _T("Unofficial: ") : _T("Official: ");\n                while(ttfile.GetHostEntry(entry, i++))\n                {\n                    m_pubservers.push_back(entry);\n                    int newindex = m_wndHosts.AddString(prefix + STR_UTF8(entry.szEntryName.c_str()));\n                    m_wndHosts.SetItemData(newindex, PUBSERVER_ITEMDATA);\n                }')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.cpp',
+              '            KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);\n            KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);\n            m_HttpPubServers.reset();\n        }\n        break;\n    case TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID :\n        KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);\n        KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);\n        m_HttpPubServers.reset();\n        break;',
+              '            BOOL requestUnofficial = m_bPendingUnofficialServers && !m_bServerListRequestUnofficial;\n            m_bPendingUnofficialServers = FALSE;\n            KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);\n            KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);\n            m_HttpPubServers.reset();\n            if(requestUnofficial && NativeParityFeatures::ShowUnofficialServers())\n                StartServerListRequest(TRUE);\n        }\n        break;\n    case TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID :\n    {\n        BOOL requestUnofficial = m_bPendingUnofficialServers && !m_bServerListRequestUnofficial;\n        m_bPendingUnofficialServers = FALSE;\n        KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);\n        KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);\n        m_HttpPubServers.reset();\n        if(requestUnofficial && NativeParityFeatures::ShowUnofficialServers())\n            StartServerListRequest(TRUE);\n        break;\n    }')
+
+          replace_once(
+              'Client/TeamTalkClassic/gui/HostManagerDlg.cpp',
+              'void CHostManagerDlg::ShowPublicServers()\n{\n    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);\n    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);\n    m_HttpPubServers.reset(new CHttpRequest(URL_PUBLICSERVER));\n    SetTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID, 500, NULL);\n    SetTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID, 5000, NULL);\n}\n\nvoid CHostManagerDlg::OnBnClickedCheckPublicservers()\n{\n    if(m_btnPubServers.GetCheck() == BST_CHECKED)\n    {\n        ShowPublicServers();\n    }\n    else\n    {\n        for(int i=0;i<m_wndHosts.GetCount();)\n        {\n            if(m_wndHosts.GetItemData(i) & PUBSERVER_ITEMDATA)\n                m_wndHosts.DeleteString(i);\n            else i++;\n        }\n    }\n}',
+              'void CHostManagerDlg::StartServerListRequest(BOOL unofficial)\n{\n    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);\n    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);\n    m_HttpPubServers.reset();\n\n    CString url = URL_PUBLICSERVER;\n    url += unofficial ? _T("&official=0&unofficial=1")\n                      : _T("&official=1&unofficial=0");\n    m_bServerListRequestUnofficial = unofficial;\n    m_HttpPubServers.reset(new CHttpRequest(url));\n    SetTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID, 500, NULL);\n    SetTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID, 5000, NULL);\n}\n\nvoid CHostManagerDlg::ShowPublicServers()\n{\n    BOOL official = m_btnPubServers.GetSafeHwnd()\n        ? (m_btnPubServers.GetCheck() == BST_CHECKED)\n        : m_bPubServers;\n    BOOL unofficial = NativeParityFeatures::ShowUnofficialServers() ? TRUE : FALSE;\n\n    m_bPendingUnofficialServers = official && unofficial;\n    if(official)\n        StartServerListRequest(FALSE);\n    else if(unofficial)\n    {\n        m_bPendingUnofficialServers = FALSE;\n        StartServerListRequest(TRUE);\n    }\n}\n\nvoid CHostManagerDlg::OnBnClickedCheckPublicservers()\n{\n    m_bPubServers = m_btnPubServers.GetCheck() == BST_CHECKED;\n\n    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);\n    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);\n    m_HttpPubServers.reset();\n    m_bPendingUnofficialServers = FALSE;\n\n    for(int i=0;i<m_wndHosts.GetCount();)\n    {\n        if(m_wndHosts.GetItemData(i) & PUBSERVER_ITEMDATA)\n            m_wndHosts.DeleteString(i);\n        else i++;\n    }\n    m_pubservers.clear();\n\n    if(m_bPubServers || NativeParityFeatures::ShowUnofficialServers())\n        ShowPublicServers();\n}')
+
+      - name: Validate focused changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'NativeParityFeatures::Start' Client/TeamTalkClassic/TeamTalkApp.cpp
+          grep -q 'StartServerListRequest' Client/TeamTalkClassic/gui/HostManagerDlg.cpp
+          grep -q 'Unofficial:' Client/TeamTalkClassic/gui/HostManagerDlg.cpp
+          grep -q 'ShowUnofficialServers' Client/TeamTalkClassic/gui/HostManagerDlg.cpp
+          git diff --check
+          git diff -- Client/TeamTalkClassic/TeamTalkApp.cpp Client/TeamTalkClassic/gui/HostManagerDlg.cpp Client/TeamTalkClassic/gui/HostManagerDlg.h
+
+      - name: Commit patch to test branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Client/TeamTalkClassic/TeamTalkApp.cpp Client/TeamTalkClassic/gui/HostManagerDlg.cpp Client/TeamTalkClassic/gui/HostManagerDlg.h
+          git commit -m "Port chat list and unofficial server parity"
+          git push origin HEAD:teamtalk-pro-mic-eq
