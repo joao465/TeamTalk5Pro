@@ -2,6 +2,13 @@
 
 #include <oleacc.h>
 
+// Windows headers can expose max as a macro. NativeAccessibilityFeatures.cpp
+// uses std::max while positioning the official female icon, so remove the
+// legacy macro in this module before the C++ standard-library call is parsed.
+#ifdef max
+#undef max
+#endif
+
 // Windows exposes SetHwndPropStr as an IAccPropServices method, not as a
 // standalone function. Keep this small wrapper local to the native
 // accessibility module so callers can annotate Win32 controls for NVDA.
