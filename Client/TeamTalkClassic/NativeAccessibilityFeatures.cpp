@@ -24,7 +24,6 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "crypt32.lib")
-#pragma comment(lib, "Msimg32.lib")
 
 extern TTInstance* ttInst;
 
@@ -85,6 +84,7 @@ namespace
         HBITMAP femaleIcon = nullptr;
         int femaleIconWidth = 17;
         int femaleIconHeight = 16;
+        int femaleImageStart = -1;
     };
 
     HHOOK g_hook = nullptr;
@@ -100,7 +100,7 @@ namespace
     bool EndsWith(const std::wstring& text, const std::wstring& suffix)
     {
         return text.size() >= suffix.size() &&
-               text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
+               text.compare(text.size() - suffix.size(), suffix) == 0;
     }
 
     void StripPrefix(std::wstring& text, const std::wstring& prefix)
@@ -120,7 +120,6 @@ namespace
         if (!control)
             return;
 
-        // Keep MSAA dynamic annotation as a fallback for clients that use it.
         SetHwndPropStr(control, OBJID_CLIENT, CHILDID_SELF, PROPID_ACC_NAME, name);
         SetHwndPropStr(control, OBJID_WINDOW, CHILDID_SELF, PROPID_ACC_NAME, name);
         if (setWindowText)
@@ -299,6 +298,39 @@ namespace
         TreeView_SetItem(tree, &info);
     }
 
+    int BaseUserImageIndex(const TreeState* state, int imageIndex)
+    {
+        if (!state || state->femaleImageStart < 0)
+            return imageIndex;
+
+        const int userImageCount = USER_INDEX_END - USER_INDEX_START + 1;
+        if (imageIndex >= state->femaleImageStart &&
+            imageIndex < state->femaleImageStart + userImageCount)
+        {
+            return USER_INDEX_START + (imageIndex - state->femaleImageStart);
+        }
+        return imageIndex;
+    }
+
+    int GenderImageIndex(const TreeState* state, int imageIndex, bool female)
+    {
+        const int base = BaseUserImageIndex(state, imageIndex);
+        if (base < USER_INDEX_START || base > USER_INDEX_END)
+            return imageIndex;
+        if (!female || !state || state->femaleImageStart < 0)
+            return base;
+        return state->femaleImageStart + (base - USER_INDEX_START);
+    }
+
+    void RefreshTreeItemGenderIcon(HWND tree, HTREEITEM item)
+    {
+        TVITEMW info = {};
+        info.mask = TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+        info.hItem = item;
+        if (TreeView_GetItem(tree, &info))
+            TreeView_SetItem(tree, &info);
+    }
+
     std::wstring DecoratedUserText(const std::wstring& current, const User& user)
     {
         std::wstring text = current;
@@ -308,8 +340,6 @@ namespace
         const std::wstring femaleSuffix = L" \U0001f469";
         const std::wstring maleSuffix = L" \U0001f468";
 
-        // Remove the previous experimental prefix and any already-appended
-        // gender marker before rebuilding the display text idempotently.
         StripPrefix(text, femalePrefix);
         StripPrefix(text, malePrefix);
         StripSuffix(text, femaleSuffix);
@@ -328,8 +358,6 @@ namespace
             text.insert(name.size(), adminTag);
         }
 
-        // The icon before the name now carries the visual gender indicator.
-        // Keep the optional emoji only as trailing text, after Administrator.
         if (user.nStatusMode & STATUSMODE_FEMALE)
             text += femaleSuffix;
         else if ((user.nStatusMode & STATUSMODE_GENDER_MASK) == STATUSMODE_MALE)
@@ -353,6 +381,7 @@ namespace
                     std::wstring decorated = DecoratedUserText(current, user);
                     if (!decorated.empty() && decorated != current)
                         SetTreeItemText(tree, item, decorated);
+                    RefreshTreeItemGenderIcon(tree, item);
                 }
             }
 
@@ -373,84 +402,6 @@ namespace
         if (root)
             DecorateTreeBranch(tree, root);
         g_decoratingTree = false;
-    }
-
-    void DrawFemaleUserIcons(HWND tree, TreeState* state)
-    {
-        if (!tree || !state || !state->femaleIcon || !ttInst)
-            return;
-
-        RECT client = {};
-        GetClientRect(tree, &client);
-
-        HDC dc = GetDC(tree);
-        if (!dc)
-            return;
-        HDC source = CreateCompatibleDC(dc);
-        if (!source)
-        {
-            ReleaseDC(tree, dc);
-            return;
-        }
-
-        HGDIOBJ oldBitmap = SelectObject(source, state->femaleIcon);
-        BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-
-        HTREEITEM item = TreeView_GetFirstVisible(tree);
-        while (item)
-        {
-            RECT rect = {};
-            if (!TreeView_GetItemRect(tree, item, &rect, FALSE))
-                break;
-            if (rect.top > client.bottom)
-                break;
-
-            LPARAM data = TreeItemData(tree, item);
-            if ((data & USER_ITEMDATA) != 0)
-            {
-                int userId = static_cast<int>(data & ID_ITEMDATA);
-                User user = {};
-                if (TT_GetUser(ttInst, userId, &user) &&
-                    (user.nStatusMode & STATUSMODE_FEMALE))
-                {
-                    const int x = static_cast<int>(rect.left);
-                    const int rowTop = static_cast<int>(rect.top);
-                    const int rowHeight = static_cast<int>(rect.bottom - rect.top);
-                    int iconOffset = (rowHeight - state->femaleIconHeight) / 2;
-                    if (iconOffset < 0)
-                        iconOffset = 0;
-                    const int y = rowTop + iconOffset;
-
-                    COLORREF background = TreeView_GetBkColor(tree);
-                    if (background == CLR_NONE)
-                        background = GetSysColor(COLOR_WINDOW);
-                    RECT iconRect = {
-                        static_cast<LONG>(x),
-                        static_cast<LONG>(y),
-                        static_cast<LONG>(x + state->femaleIconWidth),
-                        static_cast<LONG>(y + state->femaleIconHeight)
-                    };
-                    HBRUSH brush = CreateSolidBrush(background);
-                    if (brush)
-                    {
-                        FillRect(dc, &iconRect, brush);
-                        DeleteObject(brush);
-                    }
-
-                    AlphaBlend(dc, x, y,
-                               state->femaleIconWidth, state->femaleIconHeight,
-                               source, 0, 0,
-                               state->femaleIconWidth, state->femaleIconHeight,
-                               blend);
-                }
-            }
-
-            item = TreeView_GetNextVisible(tree, item);
-        }
-
-        SelectObject(source, oldBitmap);
-        DeleteDC(source);
-        ReleaseDC(tree, dc);
     }
 
     LRESULT CALLBACK UserTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -476,9 +427,43 @@ namespace
             return result;
         }
 
+        TVITEMW setItemCopy = {};
+        LPARAM forwardedLParam = lParam;
+        if (state && msg == TVM_SETITEMW && lParam)
+        {
+            const TVITEMW* original = reinterpret_cast<const TVITEMW*>(lParam);
+            setItemCopy = *original;
+            if (setItemCopy.mask & (TVIF_IMAGE | TVIF_SELECTEDIMAGE))
+            {
+                LPARAM data = (setItemCopy.mask & TVIF_PARAM)
+                    ? setItemCopy.lParam : TreeItemData(hwnd, setItemCopy.hItem);
+                if ((data & USER_ITEMDATA) != 0 && ttInst)
+                {
+                    int userId = static_cast<int>(data & ID_ITEMDATA);
+                    User user = {};
+                    const bool female = TT_GetUser(ttInst, userId, &user) &&
+                                        (user.nStatusMode & STATUSMODE_FEMALE);
+                    if (setItemCopy.mask & TVIF_IMAGE)
+                        setItemCopy.iImage = GenderImageIndex(state, setItemCopy.iImage, female);
+                    if (setItemCopy.mask & TVIF_SELECTEDIMAGE)
+                        setItemCopy.iSelectedImage = GenderImageIndex(state, setItemCopy.iSelectedImage, female);
+                }
+            }
+            forwardedLParam = reinterpret_cast<LPARAM>(&setItemCopy);
+        }
+
         LRESULT result = previous
-            ? CallWindowProcW(previous, hwnd, msg, wParam, lParam)
-            : DefWindowProcW(hwnd, msg, wParam, lParam);
+            ? CallWindowProcW(previous, hwnd, msg, wParam, forwardedLParam)
+            : DefWindowProcW(hwnd, msg, wParam, forwardedLParam);
+
+        if (state && msg == TVM_GETITEMW && result && lParam)
+        {
+            TVITEMW* info = reinterpret_cast<TVITEMW*>(lParam);
+            if (info->mask & TVIF_IMAGE)
+                info->iImage = BaseUserImageIndex(state, info->iImage);
+            if (info->mask & TVIF_SELECTEDIMAGE)
+                info->iSelectedImage = BaseUserImageIndex(state, info->iSelectedImage);
+        }
 
         if (!g_decoratingTree &&
             (msg == TVM_SETITEMW || msg == TVM_INSERTITEMW || msg == TVM_DELETEITEM))
@@ -486,9 +471,6 @@ namespace
             DecorateUserTree(hwnd);
             InvalidateRect(hwnd, nullptr, FALSE);
         }
-
-        if (msg == WM_PAINT)
-            DrawFemaleUserIcons(hwnd, state);
 
         return result;
     }
@@ -501,6 +483,27 @@ namespace
         TreeState* state = new TreeState();
         state->femaleIcon = LoadOfficialFemaleIcon(&state->femaleIconWidth,
                                                     &state->femaleIconHeight);
+        if (state->femaleIcon)
+        {
+            HIMAGELIST imageList = TreeView_GetImageList(tree, TVSIL_NORMAL);
+            if (imageList)
+            {
+                const int userImageCount = USER_INDEX_END - USER_INDEX_START + 1;
+                const int start = ImageList_GetImageCount(imageList);
+                bool addedAll = true;
+                for (int i = 0; i < userImageCount; ++i)
+                {
+                    if (ImageList_Add(imageList, state->femaleIcon, nullptr) != start + i)
+                    {
+                        addedAll = false;
+                        break;
+                    }
+                }
+                if (addedAll)
+                    state->femaleImageStart = start;
+            }
+        }
+
         SetLastError(0);
         state->previous = reinterpret_cast<WNDPROC>(
             SetWindowLongPtrW(tree, GWLP_WNDPROC,
