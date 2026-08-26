@@ -62,6 +62,8 @@ if (MSVC)
 
   set_source_files_properties (stdafx.cpp PROPERTIES COMPILE_FLAGS "/Ycstdafx.h")
 
+  list(APPEND TTCLASSIC_SOURCES NativeParityFeatures.cpp)
+
   foreach (src_file ${TTCLASSIC_SOURCES})
     set_source_files_properties (${src_file} PROPERTIES COMPILE_FLAGS "/Yustdafx.h")
   endforeach( src_file ${TTCLASSIC_SOURCES} )
