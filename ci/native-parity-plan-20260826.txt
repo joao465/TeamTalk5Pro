@@ -1,1 +1,1 @@
-placeholder
+Native parity validation trigger: chat history list view plus separate official/unofficial BearWare server listings.
