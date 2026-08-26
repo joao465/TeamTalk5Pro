@@ -1,0 +1,43 @@
+name: Fix Native MinMax Once
+
+on:
+  push:
+    branches:
+      - teamtalk-pro-mic-eq
+    paths:
+      - ci/fix-native-minmax.trigger
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: teamtalk-pro-mic-eq
+          fetch-depth: 0
+
+      - name: Fix Windows min max macro conflicts
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('Client/TeamTalkClassic/NativeParityFeatures.cpp')
+          text = path.read_text(encoding='utf-8')
+          updated = text.replace('std::max(', '(std::max)(').replace('std::min(', '(std::min)(')
+          if updated == text:
+              raise SystemExit('No std::min/std::max calls found to update')
+          path.write_text(updated, encoding='utf-8')
+
+      - name: Validate patch
+        run: git diff --check
+
+      - name: Commit and push fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Client/TeamTalkClassic/NativeParityFeatures.cpp
+          git commit -m "Fix Windows min max macro conflicts [skip ci]"
+          git push origin HEAD:teamtalk-pro-mic-eq
