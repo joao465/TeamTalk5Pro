@@ -31,6 +31,7 @@
 #include "GenerateTTFileDlg.h"
 #include "BearWareLoginDlg.h"
 #include "AppInfo.h"
+#include "NativeParityFeatures.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -60,6 +61,8 @@ CHostManagerDlg::CHostManagerDlg(ClientXML* xmlSettings, CWnd* pParent /*=NULL*/
     , m_szChannel(_T(""))
     , m_szChPassword(_T(""))
     , m_bPubServers(FALSE)
+    , m_bServerListRequestUnofficial(FALSE)
+    , m_bPendingUnofficialServers(FALSE)
     , m_bEncrypted(FALSE)
 {
     //{{AFX_DATA_INIT(CHostManagerDlg)
@@ -143,7 +146,7 @@ BOOL CHostManagerDlg::OnInitDialog()
 
     m_wndUsername.AddString(_T(WEBLOGIN_BEARWARE_USERNAME));
 
-    if(m_bPubServers)
+    if(m_bPubServers || NativeParityFeatures::ShowUnofficialServers())
         ShowPublicServers();
 
     DisplayHosts();
@@ -423,52 +426,89 @@ void CHostManagerDlg::OnTimer(UINT_PTR nIDEvent)
             {
                 int i=0;
                 HostEntry entry;
+                CString prefix = m_bServerListRequestUnofficial ? _T("Unofficial: ") : _T("Official: ");
                 while(ttfile.GetHostEntry(entry, i++))
                 {
                     m_pubservers.push_back(entry);
-                    int newindex = m_wndHosts.AddString(CString(LoadText(IDS_HOSTMANAGERPUBLIC, _T("Public: "))) 
-                        + STR_UTF8(entry.szEntryName.c_str()));
+                    int newindex = m_wndHosts.AddString(prefix + STR_UTF8(entry.szEntryName.c_str()));
                     m_wndHosts.SetItemData(newindex, PUBSERVER_ITEMDATA);
                 }
             }
 
+            BOOL requestUnofficial = m_bPendingUnofficialServers && !m_bServerListRequestUnofficial;
+            m_bPendingUnofficialServers = FALSE;
             KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);
             KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);
             m_HttpPubServers.reset();
+            if(requestUnofficial && NativeParityFeatures::ShowUnofficialServers())
+                StartServerListRequest(TRUE);
         }
         break;
     case TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID :
+    {
+        BOOL requestUnofficial = m_bPendingUnofficialServers && !m_bServerListRequestUnofficial;
+        m_bPendingUnofficialServers = FALSE;
         KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);
         KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);
         m_HttpPubServers.reset();
+        if(requestUnofficial && NativeParityFeatures::ShowUnofficialServers())
+            StartServerListRequest(TRUE);
         break;
+    }
     }
 }
 
-void CHostManagerDlg::ShowPublicServers()
+void CHostManagerDlg::StartServerListRequest(BOOL unofficial)
 {
     KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);
     KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);
-    m_HttpPubServers.reset(new CHttpRequest(URL_PUBLICSERVER));
+    m_HttpPubServers.reset();
+
+    CString url = URL_PUBLICSERVER;
+    url += unofficial ? _T("&official=0&unofficial=1")
+                      : _T("&official=1&unofficial=0");
+    m_bServerListRequestUnofficial = unofficial;
+    m_HttpPubServers.reset(new CHttpRequest(url));
     SetTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID, 500, NULL);
     SetTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID, 5000, NULL);
 }
 
+void CHostManagerDlg::ShowPublicServers()
+{
+    BOOL official = m_btnPubServers.GetSafeHwnd()
+        ? (m_btnPubServers.GetCheck() == BST_CHECKED)
+        : m_bPubServers;
+    BOOL unofficial = NativeParityFeatures::ShowUnofficialServers() ? TRUE : FALSE;
+
+    m_bPendingUnofficialServers = official && unofficial;
+    if(official)
+        StartServerListRequest(FALSE);
+    else if(unofficial)
+    {
+        m_bPendingUnofficialServers = FALSE;
+        StartServerListRequest(TRUE);
+    }
+}
+
 void CHostManagerDlg::OnBnClickedCheckPublicservers()
 {
-    if(m_btnPubServers.GetCheck() == BST_CHECKED)
+    m_bPubServers = m_btnPubServers.GetCheck() == BST_CHECKED;
+
+    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_UPDATE_ID);
+    KillTimer(TIMER_HTTPREQUEST_SERVERLIST_TIMEOUT_ID);
+    m_HttpPubServers.reset();
+    m_bPendingUnofficialServers = FALSE;
+
+    for(int i=0;i<m_wndHosts.GetCount();)
     {
+        if(m_wndHosts.GetItemData(i) & PUBSERVER_ITEMDATA)
+            m_wndHosts.DeleteString(i);
+        else i++;
+    }
+    m_pubservers.clear();
+
+    if(m_bPubServers || NativeParityFeatures::ShowUnofficialServers())
         ShowPublicServers();
-    }
-    else
-    {
-        for(int i=0;i<m_wndHosts.GetCount();)
-        {
-            if(m_wndHosts.GetItemData(i) & PUBSERVER_ITEMDATA)
-                m_wndHosts.DeleteString(i);
-            else i++;
-        }
-    }
 }
 
 void CHostManagerDlg::OnLbnDblclkListHosts()

@@ -90,6 +90,7 @@ protected:
     DECLARE_MESSAGE_MAP()
 
     void ShowPublicServers();
+    void StartServerListRequest(BOOL unofficial);
     BOOL GetHostEntry(teamtalk::HostEntry& entry);
 
     void DisplayHosts();
@@ -109,6 +110,8 @@ public:
     afx_msg void OnTimer(UINT_PTR nIDEvent);
     CButton m_btnPubServers;
     BOOL m_bPubServers;
+    BOOL m_bServerListRequestUnofficial;
+    BOOL m_bPendingUnofficialServers;
     afx_msg void OnBnClickedCheckPublicservers();
     afx_msg void OnLbnDblclkListHosts();
     afx_msg void OnBnClickedButtonGentt();

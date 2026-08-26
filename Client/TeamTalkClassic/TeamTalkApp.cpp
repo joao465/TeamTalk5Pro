@@ -28,6 +28,7 @@
 #include "License.h"
 #include "ProNativeRuntime.h"
 #include "NativeWindowsUI.h"
+#include "NativeParityFeatures.h"
 #include <VersionHelpers.h>
 
 #ifdef _DEBUG
@@ -191,7 +192,9 @@ BOOL CTeamTalkApp::InitInstance()
     // experimental implementation, no worker thread mutates HWNDs and no
     // separate "TeamTalk Pro" menu is injected.
     NativeWindowsUI::Start();
+    NativeParityFeatures::Start();
     INT_PTR nResponse = dlg.DoModal();
+    NativeParityFeatures::Stop();
     NativeWindowsUI::Stop();
     ProNativeRuntime::Stop();
 
@@ -210,6 +213,7 @@ BOOL CTeamTalkApp::InitInstance()
 
 int CTeamTalkApp::ExitInstance()
 {
+    NativeParityFeatures::Stop();
     NativeWindowsUI::Stop();
     ProNativeRuntime::Stop();
     return CWinApp::ExitInstance();
