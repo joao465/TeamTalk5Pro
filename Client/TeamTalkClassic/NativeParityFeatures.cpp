@@ -141,11 +141,11 @@ namespace
         GetClientRect(hwnd, &client);
 
         int x = anchorRc.left;
-        int y = std::max(anchorRc.bottom + 6, sortRc.bottom + 4);
+        int y = (std::max)(anchorRc.bottom + 6, sortRc.bottom + 4);
         int maxY = groupRc.bottom > 0 ? groupRc.bottom - 28 : client.bottom - 30;
-        y = std::min(y, maxY);
+        y = (std::min)(y, maxY);
         int width = (groupRc.right > x ? groupRc.right : client.right) - x - 8;
-        width = std::max(width, 180);
+        width = (std::max)(width, 180);
 
         state->checkbox = CreateWindowExW(
             0, L"BUTTON", L"Show chat history as list view instead of text edit",
@@ -249,8 +249,8 @@ namespace
         const int gap = 8;
         int left = row.left;
         int right = groupRc.right - 8;
-        int width = std::max(70, (right - left - gap) / 2);
-        int height = std::max(20, row.bottom - row.top + 6);
+        int width = (std::max)(70, (right - left - gap) / 2);
+        int height = (std::max)(20, row.bottom - row.top + 6);
 
         MoveWindow(official, left, row.top, width, height, TRUE);
         state->checkbox = CreateWindowExW(
@@ -381,7 +381,7 @@ namespace
             return;
 
         int length = GetWindowTextLengthW(rich);
-        std::vector<wchar_t> buffer(static_cast<size_t>(std::max(0, length)) + 1, L'\0');
+        std::vector<wchar_t> buffer(static_cast<size_t>((std::max)(0, length)) + 1, L'\0');
         if (length > 0)
             GetWindowTextW(rich, buffer.data(), length + 1);
 
@@ -416,14 +416,14 @@ namespace
         {
             int selection = count - 1;
             if (listFocused && oldSelection >= 0)
-                selection = std::min(oldSelection, count - 1);
+                selection = (std::min)(oldSelection, count - 1);
             SendMessageW(list, LB_SETCURSEL, selection, 0);
 
             RECT rc = {};
             GetClientRect(list, &rc);
             int itemHeight = static_cast<int>(SendMessageW(list, LB_GETITEMHEIGHT, 0, 0));
-            int visible = itemHeight > 0 ? std::max(1, (rc.bottom - rc.top) / itemHeight) : 1;
-            SendMessageW(list, LB_SETTOPINDEX, std::max(0, count - visible), 0);
+            int visible = itemHeight > 0 ? (std::max)(1, (rc.bottom - rc.top) / itemHeight) : 1;
+            SendMessageW(list, LB_SETTOPINDEX, (std::max)(0, count - visible), 0);
         }
 
         SendMessageW(list, WM_SETREDRAW, TRUE, 0);
@@ -461,8 +461,8 @@ namespace
             return;
         RECT rc = ChildRect(hwnd, state->rich);
         MoveWindow(state->list, rc.left, rc.top,
-                   std::max(1, rc.right - rc.left),
-                   std::max(1, rc.bottom - rc.top), TRUE);
+                   (std::max)(1, rc.right - rc.left),
+                   (std::max)(1, rc.bottom - rc.top), TRUE);
     }
 
     void ApplyChatHistory(HWND hwnd)
@@ -476,8 +476,8 @@ namespace
             WS_EX_CLIENTEDGE, L"LISTBOX", L"Chat history",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
             LBS_NOTIFY | LBS_NOINTEGRALHEIGHT,
-            rc.left, rc.top, std::max(1, rc.right - rc.left),
-            std::max(1, rc.bottom - rc.top), hwnd,
+            rc.left, rc.top, (std::max)(1, rc.right - rc.left),
+            (std::max)(1, rc.bottom - rc.top), hwnd,
             reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_NATIVE_HISTORY_LIST)),
             AfxGetInstanceHandle(), nullptr);
         if (!state->list)
