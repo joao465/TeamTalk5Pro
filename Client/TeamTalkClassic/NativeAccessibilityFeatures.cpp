@@ -100,7 +100,7 @@ namespace
     bool EndsWith(const std::wstring& text, const std::wstring& suffix)
     {
         return text.size() >= suffix.size() &&
-               text.compare(text.size() - suffix.size(), suffix) == 0;
+               text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
     }
 
     void StripPrefix(std::wstring& text, const std::wstring& prefix)
