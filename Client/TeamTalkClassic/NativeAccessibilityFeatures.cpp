@@ -16,6 +16,7 @@
 #include <commctrl.h>
 #include <oleacc.h>
 #include <objidl.h>
+#include <uxtheme.h>
 #include <wincodec.h>
 #include <wincrypt.h>
 #include <tinyxml2.h>
@@ -24,16 +25,22 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "crypt32.lib")
+#pragma comment(lib, "Msimg32.lib")
+#pragma comment(lib, "uxtheme.lib")
+#pragma comment(lib, "advapi32.lib")
 
 extern TTInstance* ttInst;
 
 namespace
 {
+    constexpr UINT WM_TT_APPLY_MODERN_UI = WM_APP + 0x341;
     constexpr UINT_PTR TIMER_SOUND_ACCESSIBILITY = 0x6A31;
     constexpr UINT_PTR TIMER_SERVER_COUNTRY = 0x6A32;
+    constexpr UINT_PTR TIMER_SYSTEM_THEME = 0x6A33;
 
     constexpr int IDC_NATIVE_SECONDARY_LABEL = 60101;
     constexpr int IDC_NATIVE_SECONDARY_COMBO = 60102;
+    constexpr int IDC_NATIVE_EQ_HEADING = 60103;
     constexpr int IDC_NATIVE_EQ_BASS_LABEL = 60104;
     constexpr int IDC_NATIVE_EQ_BASS = 60105;
     constexpr int IDC_NATIVE_EQ_MID_LABEL = 60106;
@@ -84,7 +91,6 @@ namespace
         HBITMAP femaleIcon = nullptr;
         int femaleIconWidth = 17;
         int femaleIconHeight = 16;
-        int femaleImageStart = -1;
     };
 
     HHOOK g_hook = nullptr;
@@ -115,6 +121,86 @@ namespace
             text.erase(text.size() - suffix.size());
     }
 
+    bool IsSystemDarkTheme()
+    {
+        DWORD appsUseLightTheme = 1;
+        HKEY key = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                          L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                          0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS)
+        {
+            DWORD type = 0;
+            DWORD size = sizeof(appsUseLightTheme);
+            if (RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, &type,
+                                 reinterpret_cast<LPBYTE>(&appsUseLightTheme),
+                                 &size) != ERROR_SUCCESS || type != REG_DWORD)
+            {
+                appsUseLightTheme = 1;
+            }
+            RegCloseKey(key);
+        }
+        return appsUseLightTheme == 0;
+    }
+
+    void ApplyDarkTitleBar(HWND hwnd, bool dark)
+    {
+        if (!hwnd)
+            return;
+
+        HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+        if (!dwm)
+            return;
+
+        typedef HRESULT (WINAPI* DwmSetWindowAttributeFn)(HWND, DWORD, LPCVOID, DWORD);
+        DwmSetWindowAttributeFn setAttribute = reinterpret_cast<DwmSetWindowAttributeFn>(
+            GetProcAddress(dwm, "DwmSetWindowAttribute"));
+        if (setAttribute)
+        {
+            BOOL enabled = dark ? TRUE : FALSE;
+            const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+            if (FAILED(setAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                    &enabled, sizeof(enabled))))
+            {
+                const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
+                setAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD,
+                             &enabled, sizeof(enabled));
+            }
+        }
+        FreeLibrary(dwm);
+    }
+
+    BOOL CALLBACK ApplyChildThemeProc(HWND child, LPARAM lParam)
+    {
+        const bool dark = lParam != 0;
+        SetWindowTheme(child, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+        return TRUE;
+    }
+
+    void ApplySystemTheme(HWND hwnd)
+    {
+        if (!hwnd)
+            return;
+
+        const bool dark = IsSystemDarkTheme();
+        SetWindowTheme(hwnd, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+        EnumChildWindows(hwnd, ApplyChildThemeProc, dark ? 1 : 0);
+
+        HWND root = GetAncestor(hwnd, GA_ROOT);
+        ApplyDarkTitleBar(root ? root : hwnd, dark);
+
+        HWND tree = GetDlgItem(hwnd, IDC_TREE_SESSION);
+        if (tree)
+        {
+            SetWindowTheme(tree, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+            TreeView_SetBkColor(tree, dark ? RGB(32, 32, 32) : GetSysColor(COLOR_WINDOW));
+            TreeView_SetTextColor(tree, dark ? RGB(240, 240, 240) : GetSysColor(COLOR_WINDOWTEXT));
+            InvalidateRect(tree, nullptr, TRUE);
+        }
+
+        RedrawWindow(hwnd, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    }
+
     void SetAccessibleName(HWND control, const wchar_t* name, bool setWindowText)
     {
         if (!control)
@@ -136,16 +222,27 @@ namespace
         if (!secondary || !bass || !mid || !treble)
             return false;
 
-        SetWindowTextW(GetDlgItem(hwnd, IDC_NATIVE_SECONDARY_LABEL),
-                       L"Microfone secund\u00E1rio");
-        SetWindowTextW(GetDlgItem(hwnd, IDC_NATIVE_EQ_BASS_LABEL), L"Graves");
-        SetWindowTextW(GetDlgItem(hwnd, IDC_NATIVE_EQ_MID_LABEL), L"M\u00E9dios");
-        SetWindowTextW(GetDlgItem(hwnd, IDC_NATIVE_EQ_TREBLE_LABEL), L"Agudos");
+        HWND secondaryLabel = GetDlgItem(hwnd, IDC_NATIVE_SECONDARY_LABEL);
+        HWND eqHeading = GetDlgItem(hwnd, IDC_NATIVE_EQ_HEADING);
+        HWND bassLabel = GetDlgItem(hwnd, IDC_NATIVE_EQ_BASS_LABEL);
+        HWND midLabel = GetDlgItem(hwnd, IDC_NATIVE_EQ_MID_LABEL);
+        HWND trebleLabel = GetDlgItem(hwnd, IDC_NATIVE_EQ_TREBLE_LABEL);
+
+        if (secondaryLabel)
+            SetWindowTextW(secondaryLabel, L"Microfone secund\u00E1rio");
+        if (eqHeading)
+            SetWindowTextW(eqHeading, L"Equalizador do microfone");
+        if (bassLabel)
+            SetWindowTextW(bassLabel, L"Graves");
+        if (midLabel)
+            SetWindowTextW(midLabel, L"M\u00E9dios");
+        if (trebleLabel)
+            SetWindowTextW(trebleLabel, L"Agudos");
 
         SetAccessibleName(secondary, L"Microfone secund\u00E1rio", false);
-        SetAccessibleName(bass, L"Graves", true);
-        SetAccessibleName(mid, L"M\u00E9dios", true);
-        SetAccessibleName(treble, L"Agudos", true);
+        SetAccessibleName(bass, L"Graves do equalizador do microfone", true);
+        SetAccessibleName(mid, L"M\u00E9dios do equalizador do microfone", true);
+        SetAccessibleName(treble, L"Agudos do equalizador do microfone", true);
 
         LONG_PTR secondaryStyle = GetWindowLongPtrW(secondary, GWL_STYLE);
         SetWindowLongPtrW(secondary, GWL_STYLE, secondaryStyle | WS_TABSTOP);
@@ -157,6 +254,7 @@ namespace
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
 
+        ApplySystemTheme(hwnd);
         return true;
     }
 
@@ -298,39 +396,6 @@ namespace
         TreeView_SetItem(tree, &info);
     }
 
-    int BaseUserImageIndex(const TreeState* state, int imageIndex)
-    {
-        if (!state || state->femaleImageStart < 0)
-            return imageIndex;
-
-        const int userImageCount = USER_INDEX_END - USER_INDEX_START + 1;
-        if (imageIndex >= state->femaleImageStart &&
-            imageIndex < state->femaleImageStart + userImageCount)
-        {
-            return USER_INDEX_START + (imageIndex - state->femaleImageStart);
-        }
-        return imageIndex;
-    }
-
-    int GenderImageIndex(const TreeState* state, int imageIndex, bool female)
-    {
-        const int base = BaseUserImageIndex(state, imageIndex);
-        if (base < USER_INDEX_START || base > USER_INDEX_END)
-            return imageIndex;
-        if (!female || !state || state->femaleImageStart < 0)
-            return base;
-        return state->femaleImageStart + (base - USER_INDEX_START);
-    }
-
-    void RefreshTreeItemGenderIcon(HWND tree, HTREEITEM item)
-    {
-        TVITEMW info = {};
-        info.mask = TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-        info.hItem = item;
-        if (TreeView_GetItem(tree, &info))
-            TreeView_SetItem(tree, &info);
-    }
-
     std::wstring DecoratedUserText(const std::wstring& current, const User& user)
     {
         std::wstring text = current;
@@ -381,7 +446,6 @@ namespace
                     std::wstring decorated = DecoratedUserText(current, user);
                     if (!decorated.empty() && decorated != current)
                         SetTreeItemText(tree, item, decorated);
-                    RefreshTreeItemGenderIcon(tree, item);
                 }
             }
 
@@ -402,6 +466,92 @@ namespace
         if (root)
             DecorateTreeBranch(tree, root);
         g_decoratingTree = false;
+    }
+
+    void DrawFemaleUserIcons(HWND tree, TreeState* state)
+    {
+        if (!tree || !state || !state->femaleIcon || !ttInst)
+            return;
+
+        RECT client = {};
+        GetClientRect(tree, &client);
+
+        HDC dc = GetDC(tree);
+        if (!dc)
+            return;
+        HDC source = CreateCompatibleDC(dc);
+        if (!source)
+        {
+            ReleaseDC(tree, dc);
+            return;
+        }
+
+        HGDIOBJ oldBitmap = SelectObject(source, state->femaleIcon);
+        BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+
+        HTREEITEM item = TreeView_GetFirstVisible(tree);
+        while (item)
+        {
+            RECT textRect = {};
+            if (!TreeView_GetItemRect(tree, item, &textRect, TRUE))
+                break;
+            if (textRect.top > client.bottom)
+                break;
+
+            LPARAM data = TreeItemData(tree, item);
+            if ((data & USER_ITEMDATA) != 0)
+            {
+                int userId = static_cast<int>(data & ID_ITEMDATA);
+                User user = {};
+                if (TT_GetUser(ttInst, userId, &user) &&
+                    (user.nStatusMode & STATUSMODE_FEMALE))
+                {
+                    const int rowHeight = static_cast<int>(textRect.bottom - textRect.top);
+                    int iconOffset = (rowHeight - state->femaleIconHeight) / 2;
+                    if (iconOffset < 0)
+                        iconOffset = 0;
+
+                    const int x = static_cast<int>(textRect.left) - state->femaleIconWidth - 2;
+                    const int y = static_cast<int>(textRect.top) + iconOffset;
+                    if (x >= client.left)
+                    {
+                        COLORREF background = TreeView_GetBkColor(tree);
+                        if (background == CLR_NONE)
+                            background = GetSysColor(COLOR_WINDOW);
+
+                        UINT itemState = TreeView_GetItemState(
+                            tree, item, TVIS_SELECTED | TVIS_DROPHILITED);
+                        if (itemState & (TVIS_SELECTED | TVIS_DROPHILITED))
+                            background = GetSysColor(COLOR_HIGHLIGHT);
+
+                        RECT iconRect = {
+                            static_cast<LONG>(x),
+                            static_cast<LONG>(y),
+                            static_cast<LONG>(x + state->femaleIconWidth),
+                            static_cast<LONG>(y + state->femaleIconHeight)
+                        };
+                        HBRUSH brush = CreateSolidBrush(background);
+                        if (brush)
+                        {
+                            FillRect(dc, &iconRect, brush);
+                            DeleteObject(brush);
+                        }
+
+                        AlphaBlend(dc, x, y,
+                                   state->femaleIconWidth, state->femaleIconHeight,
+                                   source, 0, 0,
+                                   state->femaleIconWidth, state->femaleIconHeight,
+                                   blend);
+                    }
+                }
+            }
+
+            item = TreeView_GetNextVisible(tree, item);
+        }
+
+        SelectObject(source, oldBitmap);
+        DeleteDC(source);
+        ReleaseDC(tree, dc);
     }
 
     LRESULT CALLBACK UserTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -427,43 +577,9 @@ namespace
             return result;
         }
 
-        TVITEMW setItemCopy = {};
-        LPARAM forwardedLParam = lParam;
-        if (state && msg == TVM_SETITEMW && lParam)
-        {
-            const TVITEMW* original = reinterpret_cast<const TVITEMW*>(lParam);
-            setItemCopy = *original;
-            if (setItemCopy.mask & (TVIF_IMAGE | TVIF_SELECTEDIMAGE))
-            {
-                LPARAM data = (setItemCopy.mask & TVIF_PARAM)
-                    ? setItemCopy.lParam : TreeItemData(hwnd, setItemCopy.hItem);
-                if ((data & USER_ITEMDATA) != 0 && ttInst)
-                {
-                    int userId = static_cast<int>(data & ID_ITEMDATA);
-                    User user = {};
-                    const bool female = TT_GetUser(ttInst, userId, &user) &&
-                                        (user.nStatusMode & STATUSMODE_FEMALE);
-                    if (setItemCopy.mask & TVIF_IMAGE)
-                        setItemCopy.iImage = GenderImageIndex(state, setItemCopy.iImage, female);
-                    if (setItemCopy.mask & TVIF_SELECTEDIMAGE)
-                        setItemCopy.iSelectedImage = GenderImageIndex(state, setItemCopy.iSelectedImage, female);
-                }
-            }
-            forwardedLParam = reinterpret_cast<LPARAM>(&setItemCopy);
-        }
-
         LRESULT result = previous
-            ? CallWindowProcW(previous, hwnd, msg, wParam, forwardedLParam)
-            : DefWindowProcW(hwnd, msg, wParam, forwardedLParam);
-
-        if (state && msg == TVM_GETITEMW && result && lParam)
-        {
-            TVITEMW* info = reinterpret_cast<TVITEMW*>(lParam);
-            if (info->mask & TVIF_IMAGE)
-                info->iImage = BaseUserImageIndex(state, info->iImage);
-            if (info->mask & TVIF_SELECTEDIMAGE)
-                info->iSelectedImage = BaseUserImageIndex(state, info->iSelectedImage);
-        }
+            ? CallWindowProcW(previous, hwnd, msg, wParam, lParam)
+            : DefWindowProcW(hwnd, msg, wParam, lParam);
 
         if (!g_decoratingTree &&
             (msg == TVM_SETITEMW || msg == TVM_INSERTITEMW || msg == TVM_DELETEITEM))
@@ -471,6 +587,9 @@ namespace
             DecorateUserTree(hwnd);
             InvalidateRect(hwnd, nullptr, FALSE);
         }
+
+        if (msg == WM_PAINT)
+            DrawFemaleUserIcons(hwnd, state);
 
         return result;
     }
@@ -483,27 +602,6 @@ namespace
         TreeState* state = new TreeState();
         state->femaleIcon = LoadOfficialFemaleIcon(&state->femaleIconWidth,
                                                     &state->femaleIconHeight);
-        if (state->femaleIcon)
-        {
-            HIMAGELIST imageList = TreeView_GetImageList(tree, TVSIL_NORMAL);
-            if (imageList)
-            {
-                const int userImageCount = USER_INDEX_END - USER_INDEX_START + 1;
-                const int start = ImageList_GetImageCount(imageList);
-                bool addedAll = true;
-                for (int i = 0; i < userImageCount; ++i)
-                {
-                    if (ImageList_Add(imageList, state->femaleIcon, nullptr) != start + i)
-                    {
-                        addedAll = false;
-                        break;
-                    }
-                }
-                if (addedAll)
-                    state->femaleImageStart = start;
-            }
-        }
-
         SetLastError(0);
         state->previous = reinterpret_cast<WNDPROC>(
             SetWindowLongPtrW(tree, GWLP_WNDPROC,
@@ -732,16 +830,20 @@ namespace
         {
             const CWPSTRUCT* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
             HWND hwnd = message->hwnd;
+            const bool soundPage = IsSoundPage(hwnd);
+            const bool mainWindow = IsMainWindow(hwnd);
 
             if (message->message == WM_INITDIALOG)
             {
-                if (IsSoundPage(hwnd))
+                if (soundPage)
                 {
-                    SetTimer(hwnd, TIMER_SOUND_ACCESSIBILITY, 80, nullptr);
+                    SetTimer(hwnd, TIMER_SOUND_ACCESSIBILITY, 250, nullptr);
+                    SetTimer(hwnd, TIMER_SYSTEM_THEME, 400, nullptr);
                 }
-                else if (IsMainWindow(hwnd))
+                else if (mainWindow)
                 {
                     SubclassUserTree(GetDlgItem(hwnd, IDC_TREE_SESSION));
+                    SetTimer(hwnd, TIMER_SYSTEM_THEME, 400, nullptr);
                 }
                 else if (IsHostManager(hwnd))
                 {
@@ -749,12 +851,38 @@ namespace
                 }
             }
 
+            if (message->message == WM_TT_APPLY_MODERN_UI && soundPage)
+            {
+                SetTimer(hwnd, TIMER_SOUND_ACCESSIBILITY, 50, nullptr);
+                SetTimer(hwnd, TIMER_SYSTEM_THEME, 100, nullptr);
+            }
+
+            if ((message->message == WM_SIZE || message->message == WM_SHOWWINDOW) &&
+                soundPage)
+            {
+                SetTimer(hwnd, TIMER_SOUND_ACCESSIBILITY, 80, nullptr);
+            }
+
+            if ((message->message == WM_SETTINGCHANGE ||
+                 message->message == WM_THEMECHANGED ||
+                 message->message == WM_SYSCOLORCHANGE) &&
+                (soundPage || mainWindow))
+            {
+                ApplySystemTheme(hwnd);
+            }
+
             if (message->message == WM_TIMER)
             {
-                if (message->wParam == TIMER_SOUND_ACCESSIBILITY && IsSoundPage(hwnd))
+                if (message->wParam == TIMER_SOUND_ACCESSIBILITY && soundPage)
                 {
                     if (ApplySoundAccessibility(hwnd))
                         KillTimer(hwnd, TIMER_SOUND_ACCESSIBILITY);
+                }
+                else if (message->wParam == TIMER_SYSTEM_THEME &&
+                         (soundPage || mainWindow))
+                {
+                    ApplySystemTheme(hwnd);
+                    KillTimer(hwnd, TIMER_SYSTEM_THEME);
                 }
                 else if (message->wParam == TIMER_SERVER_COUNTRY &&
                          GetPropW(hwnd, COUNTRY_STATE_PROP))
@@ -773,6 +901,7 @@ namespace
                     delete state;
                 }
                 KillTimer(hwnd, TIMER_SOUND_ACCESSIBILITY);
+                KillTimer(hwnd, TIMER_SYSTEM_THEME);
             }
         }
 
