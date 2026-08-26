@@ -100,7 +100,7 @@ jobs:
           grep -q 'StartServerListRequest' Client/TeamTalkClassic/gui/HostManagerDlg.cpp
           grep -q 'Unofficial:' Client/TeamTalkClassic/gui/HostManagerDlg.cpp
           grep -q 'ShowUnofficialServers' Client/TeamTalkClassic/gui/HostManagerDlg.cpp
-          git diff --check
+          git -c core.whitespace=cr-at-eol diff --check
           git diff -- Client/TeamTalkClassic/TeamTalkApp.cpp Client/TeamTalkClassic/gui/HostManagerDlg.cpp Client/TeamTalkClassic/gui/HostManagerDlg.h
 
       - name: Commit patch to test branch
