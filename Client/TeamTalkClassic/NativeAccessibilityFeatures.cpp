@@ -413,17 +413,22 @@ namespace
                 if (TT_GetUser(ttInst, userId, &user) &&
                     (user.nStatusMode & STATUSMODE_FEMALE))
                 {
-                    int x = rect.left;
-                    int y = rect.top + std::max(0, (rect.bottom - rect.top - state->femaleIconHeight) / 2);
+                    const int x = static_cast<int>(rect.left);
+                    const int rowTop = static_cast<int>(rect.top);
+                    const int rowHeight = static_cast<int>(rect.bottom - rect.top);
+                    int iconOffset = (rowHeight - state->femaleIconHeight) / 2;
+                    if (iconOffset < 0)
+                        iconOffset = 0;
+                    const int y = rowTop + iconOffset;
 
                     COLORREF background = TreeView_GetBkColor(tree);
                     if (background == CLR_NONE)
                         background = GetSysColor(COLOR_WINDOW);
                     RECT iconRect = {
-                        x,
-                        y,
-                        x + state->femaleIconWidth,
-                        y + state->femaleIconHeight
+                        static_cast<LONG>(x),
+                        static_cast<LONG>(y),
+                        static_cast<LONG>(x + state->femaleIconWidth),
+                        static_cast<LONG>(y + state->femaleIconHeight)
                     };
                     HBRUSH brush = CreateSolidBrush(background);
                     if (brush)
