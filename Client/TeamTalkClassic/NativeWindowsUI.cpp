@@ -464,10 +464,6 @@ namespace
 
         const int effectGap = 8;
         const int effectWidth = (width - margin * 2 - effectGap) / 2;
-        SetWindowTextW(GetDlgItem(hwnd, IDC_CHECK_ECHOCANCEL), L"Echo cancellation");
-        SetWindowTextW(GetDlgItem(hwnd, IDC_CHECK_AGC), L"Automatic gain control");
-        SetWindowTextW(GetDlgItem(hwnd, IDC_CHECK_DENOISE), L"Noise reduction");
-        SetWindowTextW(GetDlgItem(hwnd, IDC_CHECK_POSITIONING), L"3D user positioning");
         MoveControl(hwnd, IDC_CHECK_ECHOCANCEL, margin, effectsY,
                     effectWidth, rowHeight);
         MoveControl(hwnd, IDC_CHECK_AGC, margin + effectWidth + effectGap,
@@ -477,7 +473,6 @@ namespace
         MoveControl(hwnd, IDC_CHECK_POSITIONING, margin + effectWidth + effectGap,
                     effectsY + 26, effectWidth, rowHeight);
 
-        SetWindowTextW(GetDlgItem(hwnd, IDC_STATIC_MEDIASTREAMVOL), L"Media vs. voice volume");
         MoveControl(hwnd, IDC_STATIC_MEDIASTREAMVOL, margin, mediaY,
                     labelWidth, rowHeight);
         MoveControl(hwnd, IDC_SLIDER_MEDIASTREAM_VOL, fieldX, mediaY - 2,
@@ -545,20 +540,16 @@ namespace
 
         ApplyFontToTree(hwnd);
 
-        HWND group = GetDlgItem(hwnd, IDC_STATIC_GRPSOUNDSYSTEM);
-        if (group)
-            SetWindowTextW(group, L"Audio devices and microphone processing");
-
-        // Keep these labels correct at the source. Accessibility hooks still set
-        // explicit MSAA names as a fallback, but NVDA can also derive the names
-        // directly from the adjacent static labels.
+        // Keep the original TeamTalk labels for the existing controls so the
+        // active language pack remains in charge. Only the new Pro controls are
+        // named here.
         EnsureStatic(hwnd, IDC_NATIVE_SECONDARY_LABEL,
-                     _T("Microfone secundário"), false);
+                     CString(L"Microfone secund\u00E1rio"), false);
         EnsureStatic(hwnd, IDC_NATIVE_EQ_HEADING,
-                     _T("Equalizador do microfone"), true);
-        EnsureStatic(hwnd, IDC_NATIVE_EQ_BASS_LABEL, _T("Graves"), false);
-        EnsureStatic(hwnd, IDC_NATIVE_EQ_MID_LABEL, _T("Médios"), false);
-        EnsureStatic(hwnd, IDC_NATIVE_EQ_TREBLE_LABEL, _T("Agudos"), false);
+                     CString(L"Equalizador do microfone"), true);
+        EnsureStatic(hwnd, IDC_NATIVE_EQ_BASS_LABEL, CString(L"Graves"), false);
+        EnsureStatic(hwnd, IDC_NATIVE_EQ_MID_LABEL, CString(L"M\u00E9dios"), false);
+        EnsureStatic(hwnd, IDC_NATIVE_EQ_TREBLE_LABEL, CString(L"Agudos"), false);
 
         if (!state->secondary)
         {
