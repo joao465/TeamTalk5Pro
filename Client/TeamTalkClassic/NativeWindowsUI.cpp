@@ -157,6 +157,19 @@ namespace
             MoveWindow(ctrl, x, y, std::max(1, width), std::max(1, height), TRUE);
     }
 
+    void PlaceAfter(HWND control, HWND& anchor)
+    {
+        if (!control)
+            return;
+
+        if (anchor)
+        {
+            SetWindowPos(control, anchor, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        anchor = control;
+    }
+
     CString JoinLabel(UINT firstId, LPCTSTR firstFallback,
                       UINT secondId, LPCTSTR secondFallback)
     {
@@ -490,6 +503,40 @@ namespace
                     eqWidth, 22);
     }
 
+    void OrderSoundControls(HWND hwnd, SoundState* state)
+    {
+        if (!hwnd || !state)
+            return;
+
+        // NVDA associates an unlabeled native control with the static text that
+        // immediately precedes it in dialog/Z order. The controls added by the
+        // native Pro layer are created dynamically, so without an explicit order
+        // all five labels appear first and "Agudos" can become the name of the
+        // secondary-device combo while the sliders remain unnamed.
+        HWND anchor = GetDlgItem(hwnd, IDC_COMBO_OUTPUTDRIVER);
+        PlaceAfter(GetDlgItem(hwnd, IDC_NATIVE_SECONDARY_LABEL), anchor);
+        PlaceAfter(state->secondary, anchor);
+
+        // Preserve keyboard order according to the visual top-to-bottom layout.
+        PlaceAfter(GetDlgItem(hwnd, IDC_BUTTON_TEST), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_BUTTON_REFRESHSND), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_BUTTON_DEFAULT), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_CHECK_ECHOCANCEL), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_CHECK_AGC), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_CHECK_DENOISE), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_CHECK_POSITIONING), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_STATIC_MEDIASTREAMVOL), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_SLIDER_MEDIASTREAM_VOL), anchor);
+
+        PlaceAfter(GetDlgItem(hwnd, IDC_NATIVE_EQ_HEADING), anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_NATIVE_EQ_BASS_LABEL), anchor);
+        PlaceAfter(state->bass, anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_NATIVE_EQ_MID_LABEL), anchor);
+        PlaceAfter(state->mid, anchor);
+        PlaceAfter(GetDlgItem(hwnd, IDC_NATIVE_EQ_TREBLE_LABEL), anchor);
+        PlaceAfter(state->treble, anchor);
+    }
+
     void ApplySoundPage(HWND hwnd)
     {
         SoundState* state = reinterpret_cast<SoundState*>(GetPropW(hwnd, SOUND_STATE_PROP));
@@ -502,13 +549,16 @@ namespace
         if (group)
             SetWindowTextW(group, L"Audio devices and microphone processing");
 
+        // Keep these labels correct at the source. Accessibility hooks still set
+        // explicit MSAA names as a fallback, but NVDA can also derive the names
+        // directly from the adjacent static labels.
         EnsureStatic(hwnd, IDC_NATIVE_SECONDARY_LABEL,
-                     _T("Secondary input device"), false);
+                     _T("Microfone secundário"), false);
         EnsureStatic(hwnd, IDC_NATIVE_EQ_HEADING,
-                     _T("Microphone equalizer"), true);
-        EnsureStatic(hwnd, IDC_NATIVE_EQ_BASS_LABEL, _T("Bass"), false);
-        EnsureStatic(hwnd, IDC_NATIVE_EQ_MID_LABEL, _T("Mid"), false);
-        EnsureStatic(hwnd, IDC_NATIVE_EQ_TREBLE_LABEL, _T("Treble"), false);
+                     _T("Equalizador do microfone"), true);
+        EnsureStatic(hwnd, IDC_NATIVE_EQ_BASS_LABEL, _T("Graves"), false);
+        EnsureStatic(hwnd, IDC_NATIVE_EQ_MID_LABEL, _T("Médios"), false);
+        EnsureStatic(hwnd, IDC_NATIVE_EQ_TREBLE_LABEL, _T("Agudos"), false);
 
         if (!state->secondary)
         {
@@ -532,6 +582,8 @@ namespace
                                     ReadProfileInt(L"EqualizerMid", 0));
         state->treble = EnsureTrackbar(hwnd, IDC_NATIVE_EQ_TREBLE,
                                        ReadProfileInt(L"EqualizerTreble", 0));
+
+        OrderSoundControls(hwnd, state);
 
         // The inherited resource page is 221 dialog units tall. It normally
         // maps to enough pixels for this layout; if a DPI/font combination is
