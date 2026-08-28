@@ -7,13 +7,13 @@ on:
     branches:
       - "backup-qt-5.26.4"
     paths:
-      - ".github/release-trigger-5.26.4.1"
+      - ".github/release-trigger-5.26.4.2"
   workflow_dispatch:
     inputs:
       version:
-        description: "Versão a publicar, por exemplo 5.26.4.1"
+        description: "Versão a publicar, por exemplo 5.26.4.2"
         required: true
-        default: "5.26.4.1"
+        default: "5.26.4.2"
         type: string
 
 permissions:
@@ -36,14 +36,14 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($version)) {
             $version = "${{ github.ref_name }}"
             if ($version -eq "backup-qt-5.26.4") {
-              $version = "5.26.4.1"
+              $version = "5.26.4.2"
             }
             else {
               $version = $version -replace '^pro-v', ''
             }
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
-            throw "Versao invalida: $version. Use algo como 5.26.4.1"
+            throw "Versao invalida: $version. Use algo como 5.26.4.2"
           }
 
           $parts = $version.Split('.')
@@ -53,7 +53,7 @@ jobs:
           "PRO_SDK_VERSION=$sdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Publishing TeamTalk Pro $version with SDK $sdkVersion"
 
-      - name: Stamp application, SDK version and stronger microphone EQ
+      - name: Stamp application, SDK version and extreme microphone EQ
         shell: pwsh
         run: |
           $appPath = "Client/qtTeamTalk/appinfo.h"
@@ -75,7 +75,7 @@ jobs:
           $sdkHeaderText = Get-Content $sdkHeaderPath -Raw
           $sdkHeaderVersion = '#define TEAMTALK_VERSION "' + $env:PRO_SDK_VERSION + '"'
           $sdkHeaderText = [regex]::Replace($sdkHeaderText, '#define TEAMTALK_VERSION\s+"[^"]+"', $sdkHeaderVersion)
-          $sdkHeaderText = $sdkHeaderText.Replace('maximum +12 dB', 'maximum +18 dB')
+          $sdkHeaderText = $sdkHeaderText.Replace('maximum +12 dB', 'maximum +60 dB')
           Set-Content -Path $sdkHeaderPath -Value $sdkHeaderText -Encoding utf8NoBOM
 
           $sdkDefsPath = "Library/TeamTalkLib/TeamTalkDefs.h"
@@ -90,21 +90,36 @@ jobs:
 
           $eqPath = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"
           $eqText = Get-Content $eqPath -Raw
-          $oldEqGain = '* 12.0 / 100.0;'
-          $newEqGain = '* 18.0 / 100.0;'
-          $eqGainCount = ([regex]::Matches($eqText, [regex]::Escape($oldEqGain))).Count
-          if ($eqGainCount -ne 3) {
-            throw "Esperava encontrar exatamente 3 bandas do equalizador em +12 dB, mas encontrei $eqGainCount."
+
+          $oldBassHz = 'double const bass_hz = std::min(180.0, nyquist * 0.45);'
+          $newBassHz = 'double const bass_hz = std::min(320.0, nyquist * 0.45);'
+          if (([regex]::Matches($eqText, [regex]::Escape($oldBassHz))).Count -ne 1) {
+            throw "Nao encontrei exatamente uma configuracao de frequencia de graves em 180 Hz."
           }
-          $eqText = $eqText.Replace('0..+12 dB', '0..+18 dB')
-          $eqText = $eqText.Replace($oldEqGain, $newEqGain)
+          $eqText = $eqText.Replace($oldBassHz, $newBassHz)
+
+          $oldBassGain = 'double const bass_gain_db = double(bassdb) * 12.0 / 100.0;'
+          $oldMidGain = 'double const mid_gain_db = double(middb) * 12.0 / 100.0;'
+          $oldTrebleGain = 'double const treble_gain_db = double(trebledb) * 12.0 / 100.0;'
+          if (([regex]::Matches($eqText, [regex]::Escape('* 12.0 / 100.0;'))).Count -ne 3) {
+            throw "Esperava encontrar exatamente 3 bandas do equalizador em +12 dB."
+          }
+
+          $newBassGain = "double const bass_level = double(bassdb) / 100.0;`r`n        double const bass_gain_db = 60.0 * bass_level * bass_level;"
+          $newMidGain = "double const mid_level = double(middb) / 100.0;`r`n        double const mid_gain_db = 60.0 * mid_level * mid_level;"
+          $newTrebleGain = "double const treble_level = double(trebledb) / 100.0;`r`n        double const treble_gain_db = 60.0 * treble_level * treble_level;"
+
+          $eqText = $eqText.Replace('// Internally 0..100 maps smoothly to 0..+12 dB.', '// Internally 0..100 uses a quadratic curve up to an extreme +60 dB at 100.')
+          $eqText = $eqText.Replace($oldBassGain, $newBassGain)
+          $eqText = $eqText.Replace($oldMidGain, $newMidGain)
+          $eqText = $eqText.Replace($oldTrebleGain, $newTrebleGain)
           Set-Content -Path $eqPath -Value $eqText -Encoding utf8NoBOM
 
           Select-String -Path $appPath -Pattern 'APPVERSION_SHORT|CLIENTNAME'
-          Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION|maximum \+18 dB'
+          Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION|maximum \+60 dB'
           Select-String -Path $sdkDefsPath -Pattern 'TEAMTALK_VERSION|TEAMTALK_RC_VERSION|TEAMTALK_RC_FILEVERSION'
           Select-String -Path $mainPath -Pattern 'QString client = QString\(CLIENTNAME\);'
-          Select-String -Path $eqPath -Pattern '18\.0 / 100\.0|0\.\.\+18 dB'
+          Select-String -Path $eqPath -Pattern 'bass_hz = std::min\(320\.0|60\.0 \* bass_level \* bass_level|60\.0 \* mid_level \* mid_level|60\.0 \* treble_level \* treble_level|extreme \+60 dB'
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
