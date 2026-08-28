@@ -26,7 +26,7 @@
 #include <QString>
 
 #define COMPANYNAME         "BearWare.dk"
-#define APPVERSION_SHORT    "5.26.2"
+#define APPVERSION_SHORT    "5.26.4.1"
 #define APPVERSION_POSTFIX  ""
 #define APPVERSION          APPVERSION_SHORT APPVERSION_POSTFIX
 
