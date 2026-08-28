@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "pro-v*"
+    branches:
+      - "backup-qt-5.26.4"
+    paths:
+      - ".github/release-trigger-5.26.4.1"
   workflow_dispatch:
     inputs:
       version:
@@ -31,7 +35,12 @@ jobs:
           $version = "${{ inputs.version }}"
           if ([string]::IsNullOrWhiteSpace($version)) {
             $version = "${{ github.ref_name }}"
-            $version = $version -replace '^pro-v', ''
+            if ($version -eq "backup-qt-5.26.4") {
+              $version = "5.26.4.1"
+            }
+            else {
+              $version = $version -replace '^pro-v', ''
+            }
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
             throw "Versao invalida: $version. Use algo como 5.26.4.1"
