@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versão a publicar, por exemplo 5.26.3"
+        description: "Versão a publicar, por exemplo 5.26.4.1"
         required: true
-        default: "5.26.2"
+        default: "5.26.4.1"
         type: string
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
             $version = $version -replace '^pro-v', ''
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
-            throw "Versao invalida: $version. Use algo como 5.26.3"
+            throw "Versao invalida: $version. Use algo como 5.26.4.1"
           }
 
           $parts = $version.Split('.')
@@ -44,7 +44,7 @@ jobs:
           "PRO_SDK_VERSION=$sdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Publishing TeamTalk Pro $version with SDK $sdkVersion"
 
-      - name: Stamp application and SDK version
+      - name: Stamp application, SDK version and stronger microphone EQ
         shell: pwsh
         run: |
           $appPath = "Client/qtTeamTalk/appinfo.h"
@@ -66,6 +66,7 @@ jobs:
           $sdkHeaderText = Get-Content $sdkHeaderPath -Raw
           $sdkHeaderVersion = '#define TEAMTALK_VERSION "' + $env:PRO_SDK_VERSION + '"'
           $sdkHeaderText = [regex]::Replace($sdkHeaderText, '#define TEAMTALK_VERSION\s+"[^"]+"', $sdkHeaderVersion)
+          $sdkHeaderText = $sdkHeaderText.Replace('maximum +12 dB', 'maximum +18 dB')
           Set-Content -Path $sdkHeaderPath -Value $sdkHeaderText -Encoding utf8NoBOM
 
           $sdkDefsPath = "Library/TeamTalkLib/TeamTalkDefs.h"
@@ -78,10 +79,23 @@ jobs:
           $sdkDefsText = [regex]::Replace($sdkDefsText, '#define TEAMTALK_RC_FILEVERSION\s+"[^"]+"', '#define TEAMTALK_RC_FILEVERSION     "' + $sdkRcFileVersion + '"')
           Set-Content -Path $sdkDefsPath -Value $sdkDefsText -Encoding utf8NoBOM
 
+          $eqPath = "Library/TeamTalkLib/teamtalk/client/ClientNode.cpp"
+          $eqText = Get-Content $eqPath -Raw
+          $oldEqGain = '* 12.0 / 100.0;'
+          $newEqGain = '* 18.0 / 100.0;'
+          $eqGainCount = ([regex]::Matches($eqText, [regex]::Escape($oldEqGain))).Count
+          if ($eqGainCount -ne 3) {
+            throw "Esperava encontrar exatamente 3 bandas do equalizador em +12 dB, mas encontrei $eqGainCount."
+          }
+          $eqText = $eqText.Replace('0..+12 dB', '0..+18 dB')
+          $eqText = $eqText.Replace($oldEqGain, $newEqGain)
+          Set-Content -Path $eqPath -Value $eqText -Encoding utf8NoBOM
+
           Select-String -Path $appPath -Pattern 'APPVERSION_SHORT|CLIENTNAME'
-          Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION'
+          Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION|maximum \+18 dB'
           Select-String -Path $sdkDefsPath -Pattern 'TEAMTALK_VERSION|TEAMTALK_RC_VERSION|TEAMTALK_RC_FILEVERSION'
           Select-String -Path $mainPath -Pattern 'QString client = QString\(CLIENTNAME\);'
+          Select-String -Path $eqPath -Pattern '18\.0 / 100\.0|0\.\.\+18 dB'
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
