@@ -300,7 +300,7 @@ void CMessageDlg::SetRemoteTyping(BOOL bTyping)
         SetDlgItemText(IDC_STATIC_NEWMESSAGE, text);
 
         if(hLabel)
-            NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hLabel, OBJID_CLIENT, CHILDID_SELF);
+            ::NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hLabel, OBJID_CLIENT, CHILDID_SELF);
 
         AddTextToSpeechMessage(text);
         PlayTypingSound();
@@ -314,7 +314,7 @@ void CMessageDlg::SetRemoteTyping(BOOL bTyping)
         m_bRemoteTyping = FALSE;
         SetDlgItemText(IDC_STATIC_NEWMESSAGE, m_szNewMessageLabel);
         if(hLabel)
-            NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hLabel, OBJID_CLIENT, CHILDID_SELF);
+            ::NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hLabel, OBJID_CLIENT, CHILDID_SELF);
     }
 }
 
