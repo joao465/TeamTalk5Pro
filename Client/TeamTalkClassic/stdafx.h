@@ -89,3 +89,5 @@ enum TeamTalkMenuIndex : uint32_t
     TEAMTALK_MENU_SERVER,
     TEAMTALK_MENU_HELP,
 };
+
+#include "TypingHook.h"
