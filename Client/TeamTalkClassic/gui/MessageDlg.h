@@ -81,6 +81,9 @@ protected:
     virtual BOOL OnInitDialog();
     afx_msg void OnButtonSend();
     //}}AFX_MSG
+    afx_msg void OnEnChangeMessage();
+    afx_msg void OnTimer(UINT_PTR nIDEvent);
+    afx_msg LRESULT OnRemoteTyping(WPARAM wParam, LPARAM lParam);
 
     DECLARE_MESSAGE_MAP()
 
@@ -89,6 +92,10 @@ protected:
 private:
     virtual ~CMessageDlg(){}
     BOOL m_bUserAlive;
+    BOOL m_bLocalTyping = FALSE;
+    BOOL m_bRemoteTyping = FALSE;
+    CString m_szNewMessageLabel;
+    CString m_szLastTypingSent;
     User m_user;
     User m_myself;
     class CTeamTalkDlg* m_pParent;
@@ -96,6 +103,10 @@ private:
     CFont m_Font;
     HACCEL m_hAccel; // accelerator table
     CFile m_logFile;
+
+    void SendTypingState(BOOL bTyping);
+    void SetRemoteTyping(BOOL bTyping);
+    void PlayTypingSound();
 
 public:
     afx_msg void OnSize(UINT nType, int cx, int cy);
