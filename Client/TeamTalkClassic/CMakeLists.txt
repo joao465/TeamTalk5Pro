@@ -64,6 +64,7 @@ if (MSVC)
 
   list(APPEND TTCLASSIC_SOURCES NativeParityFeatures.cpp)
   list(APPEND TTCLASSIC_SOURCES NativeAccessibilityFeatures.cpp)
+  list(APPEND TTCLASSIC_SOURCES NativeThemeAndAwayFixes.cpp)
   list(APPEND TTCLASSIC_SOURCES TypingHook.cpp)
 
   foreach (src_file ${TTCLASSIC_SOURCES})
