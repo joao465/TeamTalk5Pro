@@ -28,9 +28,13 @@
 #include "Resource.h"
 #include "MessageDlg.h"
 #include "../TeamTalkDlg.h"
+#include "../TypingHook.h"
 #include "Helper.h"
 
+#include <mmsystem.h>
 #include <string>
+
+#pragma comment(lib, "winmm.lib")
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -39,6 +43,14 @@ static char THIS_FILE[] = __FILE__;
 #endif
 
 extern TTInstance* ttInst;
+
+namespace
+{
+    constexpr UINT_PTR TIMER_LOCAL_TYPING_ID = 1001;
+    constexpr UINT_PTR TIMER_REMOTE_TYPING_ID = 1002;
+    constexpr UINT LOCAL_TYPING_REFRESH_MS = 5000;
+    constexpr UINT REMOTE_TYPING_TIMEOUT_MS = 10000;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // CSendMessageDlg dialog
@@ -72,7 +84,10 @@ BEGIN_MESSAGE_MAP(CMessageDlg, CDialog)
     //{{AFX_MSG_MAP(CSendMessageDlg)
     ON_BN_CLICKED(IDC_BUTTON_SEND, OnButtonSend)
     //}}AFX_MSG_MAP
+    ON_EN_CHANGE(IDC_RICHEDIT_MESSAGE, OnEnChangeMessage)
     ON_WM_SIZE()
+    ON_WM_TIMER()
+    ON_MESSAGE(WM_TT_REMOTE_TYPING, OnRemoteTyping)
 END_MESSAGE_MAP()
 
 /////////////////////////////////////////////////////////////////////////////
@@ -80,6 +95,13 @@ END_MESSAGE_MAP()
 
 void CMessageDlg::OnCancel() 
 {
+    if(m_bLocalTyping)
+        SendTypingState(FALSE);
+    m_bLocalTyping = FALSE;
+    KillTimer(TIMER_LOCAL_TYPING_ID);
+    KillTimer(TIMER_REMOTE_TYPING_ID);
+    UnregisterPrivateTypingDialog(m_user.nUserID, m_hWnd);
+
     CDialog::OnCancel();
     CloseLogFile(m_logFile);
     DestroyWindow();
@@ -90,6 +112,11 @@ BOOL CMessageDlg::OnInitDialog()
     CDialog::OnInitDialog();
 
     TRANSLATE(*this, IDD);
+
+    GetDlgItemText(IDC_STATIC_NEWMESSAGE, m_szNewMessageLabel);
+    if(m_szNewMessageLabel.IsEmpty())
+        m_szNewMessageLabel = _T("Nova mensagem");
+    RegisterPrivateTypingDialog(m_user.nUserID, m_hWnd);
 
     //load accelerators
     m_hAccel = ::LoadAccelerators(AfxGetResourceHandle(), (LPCTSTR)IDR_ACCELERATOR1);
@@ -177,6 +204,12 @@ void CMessageDlg::OnButtonSend()
         int utf8_len = WideCharToMultiByte(CP_UTF8, 0, msg, -1, NULL, 0, NULL, NULL);
         if (utf8_len < TT_STRLEN) {
             if (TT_DoTextMessage(ttInst, &usermsg) > 0) {
+                if(m_bLocalTyping)
+                    SendTypingState(FALSE);
+                m_bLocalTyping = FALSE;
+                m_szLastTypingSent.Empty();
+                KillTimer(TIMER_LOCAL_TYPING_ID);
+
                 m_richMessage.SetWindowText(_T(""));
                 AppendMessage(usermsg, TRUE);
                 m_pParent->PlaySoundEvent(SOUNDEVENT_USER_TEXTMSGSENT);
@@ -199,6 +232,143 @@ void CMessageDlg::OnButtonSend()
     }
 }
 
+void CMessageDlg::OnEnChangeMessage()
+{
+    if(!m_hWnd || !IsAlive())
+        return;
+
+    CString text;
+    m_richMessage.GetWindowText(text);
+
+    if(text.IsEmpty())
+    {
+        if(m_bLocalTyping)
+            SendTypingState(FALSE);
+        m_bLocalTyping = FALSE;
+        m_szLastTypingSent.Empty();
+        KillTimer(TIMER_LOCAL_TYPING_ID);
+        return;
+    }
+
+    if(!m_bLocalTyping)
+    {
+        m_bLocalTyping = TRUE;
+        m_szLastTypingSent = text;
+        SendTypingState(TRUE);
+        SetTimer(TIMER_LOCAL_TYPING_ID, LOCAL_TYPING_REFRESH_MS, NULL);
+    }
+}
+
+void CMessageDlg::SendTypingState(BOOL bTyping)
+{
+    if(!IsAlive())
+        return;
+
+    MyTextMessage typingmsg;
+    typingmsg.nMsgType = MSGTYPE_CUSTOM;
+    typingmsg.nFromUserID = m_myself.nUserID;
+    typingmsg.nToUserID = m_user.nUserID;
+
+    CString command = MakeCustomCommand(TT_INTCMD_TYPING_TEXT,
+                                        bTyping ? _T("1") : _T("0"));
+    _tcsncpy(typingmsg.szMessage, command, TT_STRLEN - 1);
+    typingmsg.szMessage[TT_STRLEN - 1] = 0;
+    TT_DoTextMessage(ttInst, &typingmsg);
+}
+
+LRESULT CMessageDlg::OnRemoteTyping(WPARAM wParam, LPARAM)
+{
+    SetRemoteTyping(wParam != FALSE);
+    return 0;
+}
+
+void CMessageDlg::SetRemoteTyping(BOOL bTyping)
+{
+    HWND hLabel = GetDlgItem(IDC_STATIC_NEWMESSAGE) ? GetDlgItem(IDC_STATIC_NEWMESSAGE)->GetSafeHwnd() : NULL;
+
+    if(bTyping)
+    {
+        KillTimer(TIMER_REMOTE_TYPING_ID);
+        SetTimer(TIMER_REMOTE_TYPING_ID, REMOTE_TYPING_TIMEOUT_MS, NULL);
+
+        if(m_bRemoteTyping)
+            return;
+
+        m_bRemoteTyping = TRUE;
+        CString text;
+        text.Format(_T("%s est\x00E1 digitando..."), GetDisplayName(m_user));
+        SetDlgItemText(IDC_STATIC_NEWMESSAGE, text);
+
+        if(hLabel)
+            NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hLabel, OBJID_CLIENT, CHILDID_SELF);
+
+        AddTextToSpeechMessage(text);
+        PlayTypingSound();
+    }
+    else
+    {
+        KillTimer(TIMER_REMOTE_TYPING_ID);
+        if(!m_bRemoteTyping)
+            return;
+
+        m_bRemoteTyping = FALSE;
+        SetDlgItemText(IDC_STATIC_NEWMESSAGE, m_szNewMessageLabel);
+        if(hLabel)
+            NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hLabel, OBJID_CLIENT, CHILDID_SELF);
+    }
+}
+
+void CMessageDlg::PlayTypingSound()
+{
+    TCHAR modulePath[MAX_PATH] = {};
+    if(!GetModuleFileName(NULL, modulePath, _countof(modulePath)))
+        return;
+
+    CString path(modulePath);
+    int slash = path.ReverseFind(_T('\\'));
+    if(slash >= 0)
+        path = path.Left(slash + 1);
+    else
+        path.Empty();
+
+    path += _T("Sounds\\typing.wav");
+    PlaySound(path, NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+}
+
+void CMessageDlg::OnTimer(UINT_PTR nIDEvent)
+{
+    if(nIDEvent == TIMER_LOCAL_TYPING_ID)
+    {
+        CString text;
+        m_richMessage.GetWindowText(text);
+
+        if(text.IsEmpty() || !IsAlive())
+        {
+            if(m_bLocalTyping && IsAlive())
+                SendTypingState(FALSE);
+            m_bLocalTyping = FALSE;
+            m_szLastTypingSent.Empty();
+            KillTimer(TIMER_LOCAL_TYPING_ID);
+            return;
+        }
+
+        if(text != m_szLastTypingSent)
+        {
+            m_szLastTypingSent = text;
+            SendTypingState(TRUE);
+        }
+        return;
+    }
+
+    if(nIDEvent == TIMER_REMOTE_TYPING_ID)
+    {
+        SetRemoteTyping(FALSE);
+        return;
+    }
+
+    CDialog::OnTimer(nIDEvent);
+}
+
 BOOL CMessageDlg::IsAlive()
 {
     return m_bUserAlive;
@@ -206,6 +376,7 @@ BOOL CMessageDlg::IsAlive()
 
 void CMessageDlg::PostNcDestroy() 
 {
+    UnregisterPrivateTypingDialog(m_user.nUserID, m_hWnd);
     CDialog::PostNcDestroy();
     m_pParent->SendMessage(WM_MESSAGEDLG_CLOSED, m_user.nUserID);
     delete this;
@@ -214,6 +385,15 @@ void CMessageDlg::PostNcDestroy()
 
 void CMessageDlg::SetAlive(BOOL state)
 {
+    if(!state && m_bLocalTyping)
+        SendTypingState(FALSE);
+
+    m_bLocalTyping = FALSE;
+    m_szLastTypingSent.Empty();
+    KillTimer(TIMER_LOCAL_TYPING_ID);
+    if(!state)
+        SetRemoteTyping(FALSE);
+
     m_bUserAlive = state;
     m_btnSend.EnableWindow(state);
 }
