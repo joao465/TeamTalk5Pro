@@ -5,18 +5,18 @@
 #undef TT_GetMessage
 #endif
 
+#ifdef MyTextMessage
+#undef MyTextMessage
+#endif
+
 #include <map>
 
 namespace
 {
     std::map<INT32, HWND> g_privateTypingDialogs;
 
-    void DispatchTypingMessage(const TTMessage& msg)
+    void DispatchTypingTextMessage(const TextMessage& textmsg)
     {
-        if (msg.nClientEvent != CLIENTEVENT_CMD_USER_TEXTMSG)
-            return;
-
-        const TextMessage& textmsg = msg.textmessage;
         if (textmsg.nMsgType != MSGTYPE_CUSTOM)
             return;
 
@@ -40,6 +40,14 @@ namespace
         else
             g_privateTypingDialogs.erase(it);
     }
+
+    void DispatchTypingMessage(const TTMessage& msg)
+    {
+        if (msg.nClientEvent != CLIENTEVENT_CMD_USER_TEXTMSG)
+            return;
+
+        DispatchTypingTextMessage(msg.textmessage);
+    }
 }
 
 void RegisterPrivateTypingDialog(INT32 nUserID, HWND hWnd)
@@ -53,6 +61,18 @@ void UnregisterPrivateTypingDialog(INT32 nUserID, HWND hWnd)
     auto it = g_privateTypingDialogs.find(nUserID);
     if (it != g_privateTypingDialogs.end() && it->second == hWnd)
         g_privateTypingDialogs.erase(it);
+}
+
+MyTextMessage MyTextMessageWithTypingHook()
+{
+    return MyTextMessage();
+}
+
+MyTextMessage MyTextMessageWithTypingHook(const TextMessage& msg)
+{
+    MyTextMessage result(msg);
+    DispatchTypingTextMessage(msg);
+    return result;
 }
 
 TTBOOL TT_GetMessageWithTypingHook(TTInstance* lpTTInstance,
