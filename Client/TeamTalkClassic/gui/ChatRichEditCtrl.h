@@ -47,6 +47,12 @@ protected:
     CRect m_rectLast;
     void ScrollDown(int nOldLineCount);
 
+    virtual void PreSubclassWindow() override
+    {
+        CRichEditCtrl::PreSubclassWindow();
+        SetEventMask(GetEventMask() | ENM_CHANGE);
+    }
+
     BOOL m_bMinimized;
 
     CString GetChatTime(const CTime& tm);
