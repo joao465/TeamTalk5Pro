@@ -13,8 +13,12 @@ extern TTInstance* ttInst;
 namespace
 {
     constexpr UINT WM_TT_APPLY_MODERN_UI = WM_APP + 0x341;
+
     constexpr UINT_PTR THEME_SUBCLASS_ID = 0x54545044;
     constexpr UINT_PTR TAB_THEME_SUBCLASS_ID = 0x54545045;
+    constexpr UINT_PTR STATUS_THEME_SUBCLASS_ID = 0x54545046;
+    constexpr UINT_PTR BORDER_THEME_SUBCLASS_ID = 0x54545047;
+    constexpr UINT_PTR CHROME_THEME_SUBCLASS_ID = 0x54545048;
 
     constexpr int IDC_NATIVE_CHANNELS_HEADING = 60001;
     constexpr int IDC_NATIVE_CONTENT_HEADING = 60002;
@@ -27,6 +31,7 @@ namespace
     constexpr COLORREF DARK_CONTROL_COLOR = RGB(45, 45, 48);
     constexpr COLORREF DARK_TEXT_COLOR = RGB(240, 240, 240);
     constexpr COLORREF DARK_BORDER_COLOR = RGB(78, 78, 82);
+    constexpr COLORREF DARK_HOT_COLOR = RGB(62, 62, 66);
     constexpr COLORREF AWAY_OVERLAY_COLOR = RGB(220, 0, 0);
 
     HHOOK g_postMessageHook = nullptr;
@@ -37,6 +42,8 @@ namespace
 
     using SetPreferredAppModeFn = int (WINAPI*)(int);
     using AllowDarkModeForWindowFn = bool (WINAPI*)(HWND, bool);
+    using RefreshImmersiveColorPolicyStateFn = void (WINAPI*)();
+    using FlushMenuThemesFn = void (WINAPI*)();
     using DwmSetWindowAttributeFn = HRESULT (WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
 
     bool IsSystemDarkTheme()
@@ -74,11 +81,18 @@ namespace
         return g_darkControlBrush;
     }
 
-    bool IsDialogClass(HWND hwnd)
+    bool IsClass(HWND hwnd, const wchar_t* wanted)
     {
+        if (!hwnd || !wanted)
+            return false;
         wchar_t className[64] = {};
         GetClassNameW(hwnd, className, static_cast<int>(_countof(className)));
-        return wcscmp(className, L"#32770") == 0;
+        return _wcsicmp(className, wanted) == 0;
+    }
+
+    bool IsDialogClass(HWND hwnd)
+    {
+        return IsClass(hwnd, L"#32770");
     }
 
     bool IsRichEditClass(const wchar_t* className)
@@ -108,6 +122,18 @@ namespace
                 GetProcAddress(theme, MAKEINTRESOURCEA(135)));
         if (setPreferredAppMode)
             setPreferredAppMode(dark ? 1 : 0);
+
+        RefreshImmersiveColorPolicyStateFn refreshPolicy =
+            reinterpret_cast<RefreshImmersiveColorPolicyStateFn>(
+                GetProcAddress(theme, MAKEINTRESOURCEA(104)));
+        if (refreshPolicy)
+            refreshPolicy();
+
+        FlushMenuThemesFn flushMenus =
+            reinterpret_cast<FlushMenuThemesFn>(
+                GetProcAddress(theme, MAKEINTRESOURCEA(136)));
+        if (flushMenus)
+            flushMenus();
 
         FreeLibrary(theme);
     }
@@ -152,6 +178,184 @@ namespace
             }
         }
         FreeLibrary(dwm);
+    }
+
+    void DrawDarkBorder(HWND hwnd)
+    {
+        if (!hwnd || !IsSystemDarkTheme())
+            return;
+
+        HDC dc = GetWindowDC(hwnd);
+        if (!dc)
+            return;
+
+        RECT windowRect = {};
+        GetWindowRect(hwnd, &windowRect);
+        const int width = windowRect.right - windowRect.left;
+        const int height = windowRect.bottom - windowRect.top;
+
+        HPEN pen = CreatePen(PS_SOLID, 1, DARK_BORDER_COLOR);
+        HGDIOBJ oldPen = pen ? SelectObject(dc, pen) : nullptr;
+        HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+
+        if (pen)
+        {
+            Rectangle(dc, 0, 0, width, height);
+            if (width > 3 && height > 3)
+                Rectangle(dc, 1, 1, width - 1, height - 1);
+        }
+
+        if (oldBrush)
+            SelectObject(dc, oldBrush);
+        if (oldPen)
+            SelectObject(dc, oldPen);
+        if (pen)
+            DeleteObject(pen);
+        ReleaseDC(hwnd, dc);
+    }
+
+    LRESULT CALLBACK BorderThemeProc(HWND hwnd, UINT message,
+                                     WPARAM wParam, LPARAM lParam,
+                                     UINT_PTR subclassId, DWORD_PTR)
+    {
+        if (message == WM_NCDESTROY)
+        {
+            RemoveWindowSubclass(hwnd, BorderThemeProc, subclassId);
+            return DefSubclassProc(hwnd, message, wParam, lParam);
+        }
+
+        LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
+
+        if (IsSystemDarkTheme() &&
+            (message == WM_NCPAINT || message == WM_NCACTIVATE ||
+             message == WM_SETFOCUS || message == WM_KILLFOCUS))
+        {
+            DrawDarkBorder(hwnd);
+        }
+
+        return result;
+    }
+
+    void PaintStatusBar(HWND hwnd, HDC dc)
+    {
+        RECT client = {};
+        GetClientRect(hwnd, &client);
+        FillRect(dc, &client, DarkDialogBrush());
+
+        HFONT font = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
+        HGDIOBJ oldFont = font ? SelectObject(dc, font) : nullptr;
+        SetTextColor(dc, DARK_TEXT_COLOR);
+        SetBkMode(dc, TRANSPARENT);
+
+        HPEN pen = CreatePen(PS_SOLID, 1, DARK_BORDER_COLOR);
+        HGDIOBJ oldPen = pen ? SelectObject(dc, pen) : nullptr;
+
+        int partCount = static_cast<int>(SendMessageW(hwnd, SB_GETPARTS, 0, 0));
+        if (partCount <= 0)
+            partCount = 1;
+
+        for (int i = 0; i < partCount; ++i)
+        {
+            RECT part = client;
+            if (partCount > 1)
+                SendMessageW(hwnd, SB_GETRECT, static_cast<WPARAM>(i),
+                             reinterpret_cast<LPARAM>(&part));
+
+            wchar_t text[2048] = {};
+            LRESULT textInfo = SendMessageW(hwnd, SB_GETTEXTW,
+                                            static_cast<WPARAM>(i),
+                                            reinterpret_cast<LPARAM>(text));
+            const UINT type = HIWORD(textInfo);
+            if ((type & SBT_OWNERDRAW) == 0 && text[0])
+            {
+                RECT textRect = part;
+                textRect.left += 5;
+                textRect.right -= 4;
+                DrawTextW(dc, text, -1, &textRect,
+                          DT_SINGLELINE | DT_VCENTER | DT_LEFT |
+                          DT_END_ELLIPSIS | DT_NOPREFIX);
+            }
+
+            if (pen && i + 1 < partCount)
+            {
+                MoveToEx(dc, part.right - 1, part.top + 2, nullptr);
+                LineTo(dc, part.right - 1, part.bottom - 2);
+            }
+        }
+
+        if (pen)
+        {
+            MoveToEx(dc, client.left, client.top, nullptr);
+            LineTo(dc, client.right, client.top);
+        }
+
+        if (oldPen)
+            SelectObject(dc, oldPen);
+        if (pen)
+            DeleteObject(pen);
+        if (oldFont)
+            SelectObject(dc, oldFont);
+    }
+
+    LRESULT CALLBACK StatusThemeProc(HWND hwnd, UINT message,
+                                     WPARAM wParam, LPARAM lParam,
+                                     UINT_PTR subclassId, DWORD_PTR)
+    {
+        if (message == WM_NCDESTROY)
+        {
+            RemoveWindowSubclass(hwnd, StatusThemeProc, subclassId);
+            return DefSubclassProc(hwnd, message, wParam, lParam);
+        }
+
+        if (!IsSystemDarkTheme())
+            return DefSubclassProc(hwnd, message, wParam, lParam);
+
+        if (message == WM_ERASEBKGND)
+        {
+            RECT client = {};
+            GetClientRect(hwnd, &client);
+            FillRect(reinterpret_cast<HDC>(wParam), &client, DarkDialogBrush());
+            return TRUE;
+        }
+
+        if (message == WM_PAINT)
+        {
+            PAINTSTRUCT ps = {};
+            HDC dc = BeginPaint(hwnd, &ps);
+            if (dc)
+                PaintStatusBar(hwnd, dc);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        if (message == WM_PRINTCLIENT && wParam)
+        {
+            PaintStatusBar(hwnd, reinterpret_cast<HDC>(wParam));
+            return 0;
+        }
+
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+    }
+
+    LRESULT CALLBACK ChromeBackgroundProc(HWND hwnd, UINT message,
+                                          WPARAM wParam, LPARAM lParam,
+                                          UINT_PTR subclassId, DWORD_PTR)
+    {
+        if (message == WM_NCDESTROY)
+        {
+            RemoveWindowSubclass(hwnd, ChromeBackgroundProc, subclassId);
+            return DefSubclassProc(hwnd, message, wParam, lParam);
+        }
+
+        if (IsSystemDarkTheme() && message == WM_ERASEBKGND)
+        {
+            RECT client = {};
+            GetClientRect(hwnd, &client);
+            FillRect(reinterpret_cast<HDC>(wParam), &client, DarkDialogBrush());
+            return TRUE;
+        }
+
+        return DefSubclassProc(hwnd, message, wParam, lParam);
     }
 
     LRESULT CALLBACK TabThemeProc(HWND hwnd, UINT message,
@@ -245,6 +449,17 @@ namespace
         return DefSubclassProc(hwnd, message, wParam, lParam);
     }
 
+    bool NeedsDarkBorder(const wchar_t* className)
+    {
+        return className &&
+               (_wcsicmp(className, L"Edit") == 0 ||
+                _wcsicmp(className, L"SysTreeView32") == 0 ||
+                _wcsicmp(className, L"SysListView32") == 0 ||
+                _wcsicmp(className, L"ListBox") == 0 ||
+                _wcsicmp(className, L"msctls_progress32") == 0 ||
+                IsRichEditClass(className));
+    }
+
     void ApplyControlTheme(HWND hwnd, bool dark)
     {
         if (!hwnd)
@@ -255,24 +470,24 @@ namespace
         wchar_t className[64] = {};
         GetClassNameW(hwnd, className, static_cast<int>(_countof(className)));
 
-        if (wcscmp(className, L"SysTreeView32") == 0)
+        if (_wcsicmp(className, L"SysTreeView32") == 0)
         {
             SetWindowTheme(hwnd, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
             TreeView_SetBkColor(hwnd, dark ? DARK_DIALOG_COLOR : GetSysColor(COLOR_WINDOW));
             TreeView_SetTextColor(hwnd, dark ? DARK_TEXT_COLOR : GetSysColor(COLOR_WINDOWTEXT));
         }
-        else if (wcscmp(className, L"SysListView32") == 0)
+        else if (_wcsicmp(className, L"SysListView32") == 0)
         {
             SetWindowTheme(hwnd, dark ? L"DarkMode_ItemsView" : L"Explorer", nullptr);
             ListView_SetBkColor(hwnd, dark ? DARK_DIALOG_COLOR : GetSysColor(COLOR_WINDOW));
             ListView_SetTextBkColor(hwnd, dark ? DARK_DIALOG_COLOR : GetSysColor(COLOR_WINDOW));
             ListView_SetTextColor(hwnd, dark ? DARK_TEXT_COLOR : GetSysColor(COLOR_WINDOWTEXT));
         }
-        else if (wcscmp(className, L"SysHeader32") == 0)
+        else if (_wcsicmp(className, L"SysHeader32") == 0)
         {
             SetWindowTheme(hwnd, dark ? L"DarkMode_ItemsView" : L"Explorer", nullptr);
         }
-        else if (wcscmp(className, L"SysTabControl32") == 0)
+        else if (_wcsicmp(className, L"SysTabControl32") == 0)
         {
             if (dark)
             {
@@ -285,17 +500,52 @@ namespace
                 SetWindowTheme(hwnd, L"Explorer", nullptr);
             }
         }
-        else if (wcscmp(className, L"msctls_statusbar32") == 0)
+        else if (_wcsicmp(className, L"msctls_statusbar32") == 0)
         {
-            SetWindowTheme(hwnd, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
-            SendMessageW(hwnd, SB_SETBKCOLOR, 0,
-                         dark ? static_cast<LPARAM>(DARK_DIALOG_COLOR)
-                              : static_cast<LPARAM>(CLR_DEFAULT));
+            if (dark)
+            {
+                SetWindowTheme(hwnd, L"", nullptr);
+                SendMessageW(hwnd, SB_SETBKCOLOR, 0,
+                             static_cast<LPARAM>(DARK_DIALOG_COLOR));
+                SetWindowSubclass(hwnd, StatusThemeProc,
+                                  STATUS_THEME_SUBCLASS_ID, 0);
+            }
+            else
+            {
+                RemoveWindowSubclass(hwnd, StatusThemeProc,
+                                     STATUS_THEME_SUBCLASS_ID);
+                SetWindowTheme(hwnd, L"Explorer", nullptr);
+                SendMessageW(hwnd, SB_SETBKCOLOR, 0,
+                             static_cast<LPARAM>(CLR_DEFAULT));
+            }
         }
-        else if (wcscmp(className, L"ToolbarWindow32") == 0 ||
-                 wcscmp(className, L"ReBarWindow32") == 0)
+        else if (_wcsicmp(className, L"ReBarWindow32") == 0)
+        {
+            SetWindowTheme(hwnd, dark ? L"" : L"Explorer", nullptr);
+            if (dark)
+            {
+                SendMessageW(hwnd, RB_SETBKCOLOR, 0,
+                             static_cast<LPARAM>(DARK_DIALOG_COLOR));
+                SetWindowSubclass(hwnd, ChromeBackgroundProc,
+                                  CHROME_THEME_SUBCLASS_ID, 0);
+            }
+            else
+            {
+                SendMessageW(hwnd, RB_SETBKCOLOR, 0,
+                             static_cast<LPARAM>(CLR_DEFAULT));
+                RemoveWindowSubclass(hwnd, ChromeBackgroundProc,
+                                     CHROME_THEME_SUBCLASS_ID);
+            }
+        }
+        else if (_wcsicmp(className, L"ToolbarWindow32") == 0)
         {
             SetWindowTheme(hwnd, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+            if (dark)
+                SetWindowSubclass(hwnd, ChromeBackgroundProc,
+                                  CHROME_THEME_SUBCLASS_ID, 0);
+            else
+                RemoveWindowSubclass(hwnd, ChromeBackgroundProc,
+                                     CHROME_THEME_SUBCLASS_ID);
         }
         else
         {
@@ -314,7 +564,53 @@ namespace
                          reinterpret_cast<LPARAM>(&format));
         }
 
+        if (NeedsDarkBorder(className))
+        {
+            if (dark)
+                SetWindowSubclass(hwnd, BorderThemeProc,
+                                  BORDER_THEME_SUBCLASS_ID, 0);
+            else
+                RemoveWindowSubclass(hwnd, BorderThemeProc,
+                                     BORDER_THEME_SUBCLASS_ID);
+        }
+
         InvalidateRect(hwnd, nullptr, TRUE);
+    }
+
+    LRESULT HandleToolbarCustomDraw(LPARAM lParam)
+    {
+        LPNMHDR header = reinterpret_cast<LPNMHDR>(lParam);
+        if (!header || header->code != NM_CUSTOMDRAW ||
+            !IsClass(header->hwndFrom, L"ToolbarWindow32"))
+        {
+            return -1;
+        }
+
+        LPNMTBCUSTOMDRAW draw = reinterpret_cast<LPNMTBCUSTOMDRAW>(lParam);
+        if (draw->nmcd.dwDrawStage == CDDS_PREPAINT)
+        {
+            FillRect(draw->nmcd.hdc, &draw->nmcd.rc, DarkDialogBrush());
+            return CDRF_NOTIFYITEMDRAW;
+        }
+
+        if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
+        {
+            draw->clrText = DARK_TEXT_COLOR;
+            draw->clrMark = DARK_TEXT_COLOR;
+            draw->clrTextHighlight = DARK_TEXT_COLOR;
+            draw->clrBtnFace = DARK_DIALOG_COLOR;
+            draw->clrBtnHighlight = DARK_CONTROL_COLOR;
+            draw->clrHighlightHotTrack = DARK_HOT_COLOR;
+            draw->nStringBkMode = TRANSPARENT;
+            draw->nHLStringBkMode = TRANSPARENT;
+#ifdef TBCDRF_USECDCOLORS
+            return TBCDRF_USECDCOLORS;
+#else
+            return CDRF_DODEFAULT;
+#endif
+        }
+
+        return CDRF_DODEFAULT;
     }
 
     LRESULT CALLBACK ThemeSubclassProc(HWND hwnd, UINT message,
@@ -367,6 +663,14 @@ namespace
                 SetBkColor(dc, DARK_CONTROL_COLOR);
                 return reinterpret_cast<LRESULT>(DarkControlBrush());
             }
+
+            case WM_NOTIFY:
+            {
+                LRESULT custom = HandleToolbarCustomDraw(lParam);
+                if (custom != -1)
+                    return custom;
+                break;
+            }
             }
         }
 
@@ -392,16 +696,30 @@ namespace
 
         ConfigurePreferredAppMode(dark);
         ApplyControlTheme(hwnd, dark);
-        if (IsDialogClass(hwnd) || GetAncestor(hwnd, GA_ROOT) == hwnd)
-            SetWindowSubclass(hwnd, ThemeSubclassProc, THEME_SUBCLASS_ID, 0);
-
-        EnumChildWindows(hwnd, ApplyChildThemeProc, dark ? 1 : 0);
 
         HWND root = GetAncestor(hwnd, GA_ROOT);
-        ApplyDarkTitleBar(root ? root : hwnd, dark);
+        if (!root)
+            root = hwnd;
 
-        RedrawWindow(hwnd, nullptr, nullptr,
-                     RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+        AllowDarkModeForWindow(root, dark);
+        SetWindowTheme(root, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+
+        if (IsDialogClass(hwnd) || root == hwnd)
+            SetWindowSubclass(hwnd, ThemeSubclassProc, THEME_SUBCLASS_ID, 0);
+        if (root != hwnd)
+            SetWindowSubclass(root, ThemeSubclassProc, THEME_SUBCLASS_ID, 0);
+
+        EnumChildWindows(root, ApplyChildThemeProc, dark ? 1 : 0);
+
+        ApplyDarkTitleBar(root, dark);
+
+        if (GetMenu(root))
+            DrawMenuBar(root);
+
+        RedrawWindow(root, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_FRAME |
+                     RDW_ALLCHILDREN | RDW_UPDATENOW);
+
         g_applyingTheme = false;
     }
 
@@ -467,15 +785,13 @@ namespace
 
             wchar_t className[64] = {};
             GetClassNameW(child, className, static_cast<int>(_countof(className)));
-            if (wcscmp(className, L"ToolbarWindow32") == 0 ||
-                wcscmp(className, L"ReBarWindow32") == 0)
+            if (_wcsicmp(className, L"ToolbarWindow32") == 0 ||
+                _wcsicmp(className, L"ReBarWindow32") == 0)
             {
                 best = max(best, static_cast<int>(rect.bottom));
                 continue;
             }
 
-            // Classic also uses small child controls for parts of its toolbar.
-            // Only use these as a fallback when they are in the narrow top strip.
             if (rect.top <= 45 && rect.bottom <= 80 && childHeight <= 45 &&
                 rect.right > client.left && rect.left < client.right)
             {
@@ -495,19 +811,21 @@ namespace
             if (!IsWindowVisible(child) || GetParent(child) != hwnd)
                 continue;
 
-            wchar_t className[64] = {};
-            GetClassNameW(child, className, static_cast<int>(_countof(className)));
-            if (wcscmp(className, L"msctls_statusbar32") != 0)
+            if (!IsClass(child, L"msctls_statusbar32"))
                 continue;
 
             RECT rect = {};
-            if (ChildRectInParent(child, hwnd, rect) && rect.top > clientHeight / 2)
+            if (ChildRectInParent(child, hwnd, rect) &&
+                rect.top > clientHeight / 2)
+            {
                 top = min(top, static_cast<int>(rect.top));
+            }
         }
         return top;
     }
 
-    void MoveNativeControl(HWND parent, int id, int x, int y, int width, int height)
+    void MoveNativeControl(HWND parent, int id,
+                           int x, int y, int width, int height)
     {
         HWND control = GetDlgItem(parent, id);
         if (!control)
@@ -661,7 +979,8 @@ namespace
     {
         if (code >= 0 && lParam)
         {
-            const CWPRETSTRUCT* message = reinterpret_cast<const CWPRETSTRUCT*>(lParam);
+            const CWPRETSTRUCT* message =
+                reinterpret_cast<const CWPRETSTRUCT*>(lParam);
             if (message && !g_applyingTheme)
             {
                 switch (message->message)
@@ -673,8 +992,10 @@ namespace
                 case WM_CREATE:
                     ApplyControlTheme(message->hwnd, IsSystemDarkTheme());
                     if (IsDialogClass(message->hwnd))
+                    {
                         SetWindowSubclass(message->hwnd, ThemeSubclassProc,
                                           THEME_SUBCLASS_ID, 0);
+                    }
                     break;
 
                 case WM_TT_APPLY_MODERN_UI:
@@ -694,6 +1015,7 @@ namespace
 
                 case WM_SETTINGCHANGE:
                 case WM_THEMECHANGED:
+                case WM_SYSCOLORCHANGE:
                 {
                     HWND root = GetAncestor(message->hwnd, GA_ROOT);
                     ApplyThemeToWindow(root ? root : message->hwnd);
