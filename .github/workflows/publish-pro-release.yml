@@ -1,4 +1,4 @@
-name: Publish TeamTalk Pro Release
+name: TeamTalk Pro - Publish Release
 
 on:
   push:
@@ -160,7 +160,7 @@ jobs:
           Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
 
           Compress-Archive -Path (Join-Path $stage "*") `
-            -DestinationPath (Join-Path $assets "teamtalk-pro-$env:PRO_VERSION-portable-win64.zip") `
+            -DestinationPath (Join-Path $assets "TeamTalk-Pro-$env:PRO_VERSION-Portable-x64.zip") `
             -CompressionLevel Optimal -Force
 
       - name: Build versioned installer
@@ -184,7 +184,7 @@ jobs:
             throw "Inno Setup falhou com codigo $LASTEXITCODE"
           }
 
-          $setupName = "TeamTalk_5_Pro_$env:PRO_VERSION`_Setup_x64.exe"
+          $setupName = "TeamTalk-Pro-$env:PRO_VERSION-Setup-x64.exe"
           $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\$setupName"
           if (-not (Test-Path $builtSetup)) {
             throw "Instalador nao encontrado: $builtSetup"
@@ -194,7 +194,7 @@ jobs:
       - name: Upload release build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: teamtalk-pro-${{ env.PRO_VERSION }}-release-assets
+          name: TeamTalk-Pro-${{ env.PRO_VERSION }}-Release-Files
           path: release-assets/*
           if-no-files-found: error
 
@@ -202,16 +202,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pro-v${{ env.PRO_VERSION }}
-          name: TeamTalk 5 Pro ${{ env.PRO_VERSION }}
+          name: TeamTalk Pro ${{ env.PRO_VERSION }}
           target_commitish: ${{ github.sha }}
           make_latest: true
           generate_release_notes: true
           body: |
-            TeamTalk 5 Pro ${{ env.PRO_VERSION }} para Windows x64.
+            TeamTalk Pro ${{ env.PRO_VERSION }} para Windows x64.
 
             Esta Release e a fonte oficial usada pelo atualizador automatico deste fork.
             O instalador e o pacote portatil foram gerados automaticamente pelo GitHub Actions.
           files: |
-            release-assets/TeamTalk_5_Pro_${{ env.PRO_VERSION }}_Setup_x64.exe
-            release-assets/teamtalk-pro-${{ env.PRO_VERSION }}-portable-win64.zip
+            release-assets/TeamTalk-Pro-${{ env.PRO_VERSION }}-Setup-x64.exe
+            release-assets/TeamTalk-Pro-${{ env.PRO_VERSION }}-Portable-x64.zip
           fail_on_unmatched_files: true
