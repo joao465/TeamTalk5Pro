@@ -1,4 +1,4 @@
-name: Track Latest TeamTalk Pro Release Run
+name: TeamTalk Pro - Track Latest Release
 
 on:
   push:
