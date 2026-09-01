@@ -1,4 +1,4 @@
-name: Publish TeamTalk Pro Release
+name: TeamTalk Pro - Publish Release
 
 # Diagnostic branch runs compile and package the official native build without publishing a GitHub Release.
 on:
@@ -58,7 +58,7 @@ jobs:
             } else {
               $appPath = "Client/TeamTalkClassic/AppInfo.h"
               $appText = Get-Content $appPath -Raw
-              $versionMatch = [regex]::Match($appText, '#define\s+APPVERSION_SHORT\s+_T\("([^"]+)"\)')
+              $versionMatch = [regex]::Match($appText, '#define\s+APPVERSION_SHORT\s+_T\("[^"]+"\)')
               if (-not $versionMatch.Success) {
                 throw "Nao foi possivel detectar APPVERSION_SHORT em $appPath"
               }
@@ -292,17 +292,19 @@ jobs:
             Where-Object { $_.FullName -notmatch "\\test\\" } | Select-Object -First 1
           if ($importLib) { Copy-Item $importLib.FullName $sdkLib -Force }
           @(
-            "TeamTalk 5 Pro SDK $env:PRO_SDK_VERSION",
+            "TeamTalk Pro SDK $env:PRO_SDK_VERSION",
             "Client release: $env:PRO_VERSION",
             "Windows x64",
             "Includes TeamTalk Pro microphone equalizer and secondary sound input APIs."
           ) | Set-Content (Join-Path $sdkStage "README.txt") -Encoding utf8
 
+          $portableName = "TeamTalk-Pro-$($env:PRO_VERSION)-Portable-x64.zip"
+          $sdkName = "TeamTalk-Pro-$($env:PRO_VERSION)-SDK-x64.zip"
           Compress-Archive -Path (Join-Path $stage "*") `
-            -DestinationPath (Join-Path $assets "teamtalk-pro-$env:PRO_VERSION-portable-win64.zip") `
+            -DestinationPath (Join-Path $assets $portableName) `
             -CompressionLevel Optimal -Force
           Compress-Archive -Path (Join-Path $sdkStage "*") `
-            -DestinationPath (Join-Path $assets "teamtalk-pro-$env:PRO_VERSION-sdk-win64.zip") `
+            -DestinationPath (Join-Path $assets $sdkName) `
             -CompressionLevel Optimal -Force
 
       - name: Build versioned native installer
@@ -322,7 +324,7 @@ jobs:
           & $iscc "-dClientDir=$installerSource" "-dProVersion=$env:PRO_VERSION" $iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup falhou com codigo $LASTEXITCODE" }
 
-          $setupName = "TeamTalk_5_Pro_$env:PRO_VERSION`_Setup_x64.exe"
+          $setupName = "TeamTalk-Pro-$($env:PRO_VERSION)-Setup-x64.exe"
           $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\$setupName"
           if (-not (Test-Path $builtSetup)) { throw "Instalador nao encontrado: $builtSetup" }
           Copy-Item $builtSetup (Join-Path $assets $setupName) -Force
@@ -331,7 +333,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: teamtalk-pro-${{ env.PRO_VERSION }}-official-build-diagnostics
+          name: TeamTalk-Pro-${{ env.PRO_VERSION }}-Build-Diagnostics
           path: official-diagnostics/*
           if-no-files-found: warn
           retention-days: 14
@@ -339,7 +341,7 @@ jobs:
       - name: Upload release build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: teamtalk-pro-${{ env.PRO_VERSION }}-native-release-assets
+          name: TeamTalk-Pro-${{ env.PRO_VERSION }}-Release-Files
           path: release-assets/*
           if-no-files-found: error
 
@@ -348,21 +350,21 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pro-v${{ env.PRO_VERSION }}
-          name: TeamTalk 5 Pro ${{ env.PRO_VERSION }} Native
+          name: TeamTalk Pro ${{ env.PRO_VERSION }}
           target_commitish: ${{ github.sha }}
           make_latest: true
           generate_release_notes: true
           body: |
-            TeamTalk 5 Pro ${{ env.PRO_VERSION }} para Windows x64.
+            TeamTalk Pro ${{ env.PRO_VERSION }} para Windows x64.
             SDK TeamTalk Pro: ${{ env.PRO_SDK_VERSION }}.
 
-            Esta versão migra o cliente Windows para uma interface nativa MFC/Win32 e não distribui Qt.
-            O instalador mantém o mesmo AppId e é detectado automaticamente pelas versões Qt anteriores do TeamTalk 5 Pro.
+            Esta versão usa a interface nativa MFC/Win32 e não distribui Qt.
+            O instalador mantém o mesmo AppId e é detectado automaticamente pelas versões anteriores do TeamTalk Pro.
             As configurações existentes são migradas na primeira inicialização.
 
             Inclui o SDK atualizado com as APIs Pro de equalizador do microfone e entrada de áudio secundária.
           files: |
-            release-assets/TeamTalk_5_Pro_${{ env.PRO_VERSION }}_Setup_x64.exe
-            release-assets/teamtalk-pro-${{ env.PRO_VERSION }}-portable-win64.zip
-            release-assets/teamtalk-pro-${{ env.PRO_VERSION }}-sdk-win64.zip
+            release-assets/TeamTalk-Pro-${{ env.PRO_VERSION }}-Setup-x64.exe
+            release-assets/TeamTalk-Pro-${{ env.PRO_VERSION }}-Portable-x64.zip
+            release-assets/TeamTalk-Pro-${{ env.PRO_VERSION }}-SDK-x64.zip
           fail_on_unmatched_files: true
