@@ -1,4 +1,4 @@
-name: Dispatch TeamTalk Pro Release Request
+name: TeamTalk Pro - Request Release
 
 on:
   push:
