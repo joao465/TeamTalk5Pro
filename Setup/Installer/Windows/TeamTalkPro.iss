@@ -92,7 +92,7 @@ begin
   ImportOfficialConfig := False;
 
   OfficialConfigFile := ExpandConstant('{userappdata}\BearWare.dk\TeamTalk5.ini');
-  ; Keep the existing data directory for upgrades from earlier TeamTalk Pro builds.
+  // Keep the existing data directory for upgrades from earlier TeamTalk Pro builds.
   ProConfigFile := ExpandConstant('{userappdata}\TeamTalk 5 Pro\TeamTalk5Pro.ini');
 
   if FileExists(OfficialConfigFile) and
