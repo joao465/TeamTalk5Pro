@@ -58,7 +58,7 @@ jobs:
             } else {
               $appPath = "Client/TeamTalkClassic/AppInfo.h"
               $appText = Get-Content $appPath -Raw
-              $versionMatch = [regex]::Match($appText, '#define\s+APPVERSION_SHORT\s+_T\("[^"]+"\)')
+              $versionMatch = [regex]::Match($appText, '#define\s+APPVERSION_SHORT\s+_T\("([^"]+)"\)')
               if (-not $versionMatch.Success) {
                 throw "Nao foi possivel detectar APPVERSION_SHORT em $appPath"
               }
