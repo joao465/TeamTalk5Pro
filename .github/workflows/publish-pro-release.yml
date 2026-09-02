@@ -1,19 +1,19 @@
-name: Publish TeamTalk Pro Release
+name: TeamTalk Pro - Publish Release
 
 on:
   push:
     tags:
       - "pro-v*"
     branches:
-      - "backup-qt-5.26.4"
+      - "teamtalk-pro-qt-5.26.4.3"
     paths:
-      - ".github/release-trigger-5.26.4.2"
+      - ".github/release-trigger-5.26.4.3"
   workflow_dispatch:
     inputs:
       version:
-        description: "Versão a publicar, por exemplo 5.26.4.2"
+        description: "Versão a publicar, por exemplo 5.26.4.3"
         required: true
-        default: "5.26.4.2"
+        default: "5.26.4.3"
         type: string
 
 permissions:
@@ -35,15 +35,15 @@ jobs:
           $version = "${{ inputs.version }}"
           if ([string]::IsNullOrWhiteSpace($version)) {
             $version = "${{ github.ref_name }}"
-            if ($version -eq "backup-qt-5.26.4") {
-              $version = "5.26.4.2"
+            if ($version -eq "teamtalk-pro-qt-5.26.4.3") {
+              $version = "5.26.4.3"
             }
             else {
               $version = $version -replace '^pro-v', ''
             }
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
-            throw "Versao invalida: $version. Use algo como 5.26.4.2"
+            throw "Versao invalida: $version. Use algo como 5.26.4.3"
           }
 
           $parts = $version.Split('.')
@@ -53,7 +53,7 @@ jobs:
           "PRO_SDK_VERSION=$sdkVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Publishing TeamTalk Pro $version with SDK $sdkVersion"
 
-      - name: Stamp application, SDK version and extreme microphone EQ
+      - name: Stamp application, SDK version and natural microphone EQ
         shell: pwsh
         run: |
           $appPath = "Client/qtTeamTalk/appinfo.h"
@@ -75,7 +75,6 @@ jobs:
           $sdkHeaderText = Get-Content $sdkHeaderPath -Raw
           $sdkHeaderVersion = '#define TEAMTALK_VERSION "' + $env:PRO_SDK_VERSION + '"'
           $sdkHeaderText = [regex]::Replace($sdkHeaderText, '#define TEAMTALK_VERSION\s+"[^"]+"', $sdkHeaderVersion)
-          $sdkHeaderText = $sdkHeaderText.Replace('maximum +12 dB', 'maximum +60 dB')
           Set-Content -Path $sdkHeaderPath -Value $sdkHeaderText -Encoding utf8NoBOM
 
           $sdkDefsPath = "Library/TeamTalkLib/TeamTalkDefs.h"
@@ -92,34 +91,57 @@ jobs:
           $eqText = Get-Content $eqPath -Raw
 
           $oldBassHz = 'double const bass_hz = std::min(180.0, nyquist * 0.45);'
-          $newBassHz = 'double const bass_hz = std::min(320.0, nyquist * 0.45);'
+          $newBassHz = 'double const bass_hz = std::min(90.0, nyquist * 0.45);'
           if (([regex]::Matches($eqText, [regex]::Escape($oldBassHz))).Count -ne 1) {
             throw "Nao encontrei exatamente uma configuracao de frequencia de graves em 180 Hz."
           }
           $eqText = $eqText.Replace($oldBassHz, $newBassHz)
 
+          $oldMidHz = 'double const mid_hz = std::min(1200.0, nyquist * 0.60);'
+          $newMidHz = 'double const mid_hz = std::min(1000.0, nyquist * 0.60);'
+          $eqText = $eqText.Replace($oldMidHz, $newMidHz)
+
+          $oldTrebleHz = 'double const treble_hz = std::min(4500.0, nyquist * 0.84);'
+          $newTrebleHz = 'double const treble_hz = std::min(5500.0, nyquist * 0.84);'
+          $eqText = $eqText.Replace($oldTrebleHz, $newTrebleHz)
+
           $oldBassGain = 'double const bass_gain_db = double(bassdb) * 12.0 / 100.0;'
           $oldMidGain = 'double const mid_gain_db = double(middb) * 12.0 / 100.0;'
           $oldTrebleGain = 'double const treble_gain_db = double(trebledb) * 12.0 / 100.0;'
           if (([regex]::Matches($eqText, [regex]::Escape('* 12.0 / 100.0;'))).Count -ne 3) {
-            throw "Esperava encontrar exatamente 3 bandas do equalizador em +12 dB."
+            throw "Esperava encontrar exatamente as 3 bandas originais do equalizador em +12 dB."
           }
 
-          $newBassGain = "double const bass_level = double(bassdb) / 100.0;`r`n        double const bass_gain_db = 60.0 * bass_level * bass_level;"
-          $newMidGain = "double const mid_level = double(middb) / 100.0;`r`n        double const mid_gain_db = 60.0 * mid_level * mid_level;"
-          $newTrebleGain = "double const treble_level = double(trebledb) / 100.0;`r`n        double const treble_gain_db = 60.0 * treble_level * treble_level;"
+          $newBassGain = 'double const bass_gain_db = double(bassdb) * 18.0 / 100.0;'
+          $newMidGain = 'double const mid_gain_db = double(middb) * 10.0 / 100.0;'
+          $newTrebleBlock = "double const treble_gain_db = double(trebledb) * 12.0 / 100.0;`r`n`r`n        // Automatic headroom keeps the stronger low shelf from hard-clipping PCM.`r`n        double const strongest_gain_db = std::max({bass_gain_db, mid_gain_db, treble_gain_db});`r`n        pregain = std::pow(10.0, -(strongest_gain_db * 0.65) / 20.0);"
 
-          $eqText = $eqText.Replace('// Internally 0..100 maps smoothly to 0..+12 dB.', '// Internally 0..100 uses a quadratic curve up to an extreme +60 dB at 100.')
+          $eqText = $eqText.Replace('// Internally 0..100 maps smoothly to 0..+12 dB.', '// Natural Pro curve: sub-bass up to +18 dB, mids +10 dB and treble +12 dB.')
           $eqText = $eqText.Replace($oldBassGain, $newBassGain)
           $eqText = $eqText.Replace($oldMidGain, $newMidGain)
-          $eqText = $eqText.Replace($oldTrebleGain, $newTrebleGain)
+          $eqText = $eqText.Replace($oldTrebleGain, $newTrebleBlock)
+
+          if ($eqText -notmatch 'double pregain = 1\.0;') {
+            $eqText = [regex]::Replace(
+              $eqText,
+              'int channels = 0;\r?\n    bool dirty = true;',
+              "int channels = 0;`r`n    double pregain = 1.0;`r`n    bool dirty = true;",
+              1)
+          }
+
+          $oldSample = 'double value = double(frame.input_buffer[index]);'
+          $newSample = 'double value = double(frame.input_buffer[index]) * pregain;'
+          if (([regex]::Matches($eqText, [regex]::Escape($oldSample))).Count -ne 1) {
+            throw "Nao encontrei exatamente um ponto de entrada PCM do equalizador."
+          }
+          $eqText = $eqText.Replace($oldSample, $newSample)
           Set-Content -Path $eqPath -Value $eqText -Encoding utf8NoBOM
 
-          Select-String -Path $appPath -Pattern 'APPVERSION_SHORT|CLIENTNAME'
-          Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION|maximum \+60 dB'
+          Select-String -Path $appPath -Pattern 'APPVERSION_SHORT|APPNAME_SHORT|APPCLIENTID|CLIENTNAME'
+          Select-String -Path $sdkHeaderPath -Pattern 'TEAMTALK_VERSION'
           Select-String -Path $sdkDefsPath -Pattern 'TEAMTALK_VERSION|TEAMTALK_RC_VERSION|TEAMTALK_RC_FILEVERSION'
           Select-String -Path $mainPath -Pattern 'QString client = QString\(CLIENTNAME\);'
-          Select-String -Path $eqPath -Pattern 'bass_hz = std::min\(320\.0|60\.0 \* bass_level \* bass_level|60\.0 \* mid_level \* mid_level|60\.0 \* treble_level \* treble_level|extreme \+60 dB'
+          Select-String -Path $eqPath -Pattern 'bass_hz = std::min\(90\.0|bass_gain_db.*18\.0|mid_gain_db.*10\.0|treble_gain_db.*12\.0|pregain|strongest_gain_db'
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -231,7 +253,7 @@ jobs:
           Remove-Item (Join-Path $installerSource "TeamTalk5Pro.ini") -Force -ErrorAction SilentlyContinue
 
           Compress-Archive -Path (Join-Path $stage "*") `
-            -DestinationPath (Join-Path $assets "teamtalk-pro-$env:PRO_VERSION-portable-win64.zip") `
+            -DestinationPath (Join-Path $assets "TeamTalk-Pro-$env:PRO_VERSION-Portable-x64.zip") `
             -CompressionLevel Optimal -Force
 
       - name: Build versioned installer
@@ -255,7 +277,7 @@ jobs:
             throw "Inno Setup falhou com codigo $LASTEXITCODE"
           }
 
-          $setupName = "TeamTalk_5_Pro_$env:PRO_VERSION`_Setup_x64.exe"
+          $setupName = "TeamTalk-Pro-$env:PRO_VERSION-Setup-x64.exe"
           $builtSetup = Join-Path (Split-Path $iss -Parent) "Output\$setupName"
           if (-not (Test-Path $builtSetup)) {
             throw "Instalador nao encontrado: $builtSetup"
@@ -265,7 +287,7 @@ jobs:
       - name: Upload release build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: teamtalk-pro-${{ env.PRO_VERSION }}-release-assets
+          name: TeamTalk-Pro-${{ env.PRO_VERSION }}-Release-Files
           path: release-assets/*
           if-no-files-found: error
 
@@ -273,17 +295,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pro-v${{ env.PRO_VERSION }}
-          name: TeamTalk 5 Pro ${{ env.PRO_VERSION }}
+          name: TeamTalk Pro ${{ env.PRO_VERSION }}
           target_commitish: ${{ github.sha }}
           make_latest: true
           generate_release_notes: true
           body: |
-            TeamTalk 5 Pro ${{ env.PRO_VERSION }} para Windows x64.
+            TeamTalk Pro ${{ env.PRO_VERSION }} para Windows x64.
             SDK TeamTalk: ${{ env.PRO_SDK_VERSION }}.
 
             Esta Release e a fonte oficial usada pelo atualizador automatico deste fork.
             O instalador e o pacote portatil foram gerados automaticamente pelo GitHub Actions.
           files: |
-            release-assets/TeamTalk_5_Pro_${{ env.PRO_VERSION }}_Setup_x64.exe
-            release-assets/teamtalk-pro-${{ env.PRO_VERSION }}-portable-win64.zip
+            release-assets/TeamTalk-Pro-${{ env.PRO_VERSION }}-Setup-x64.exe
+            release-assets/TeamTalk-Pro-${{ env.PRO_VERSION }}-Portable-x64.zip
           fail_on_unmatched_files: true
