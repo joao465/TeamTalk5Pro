@@ -7,7 +7,7 @@
 #endif
 
 #ifndef InstallMusicFile
-  #define InstallMusicFile "TeamTalkProInstall.wav"
+  #define InstallMusicFile "TeamTalkProInstall.mp3"
 #endif
 
 [Setup]
@@ -70,26 +70,36 @@ var
 
 #if FileExists(InstallMusicFile)
 const
-  SND_ASYNC = $0001;
-  SND_NODEFAULT = $0002;
-  SND_LOOP = $0008;
-  SND_FILENAME = $00020000;
+  InstallMusicAlias = 'TeamTalkProInstallMusic';
 
-function PlaySound(pszSound: PChar; hmod: Integer; fdwSound: Cardinal): Boolean;
-  external 'PlaySoundW@winmm.dll stdcall';
+function mciSendString(lpstrCommand: String; lpstrReturnString: String;
+  uReturnLength: Cardinal; hwndCallback: Integer): Integer;
+  external 'mciSendStringW@winmm.dll stdcall';
+
+procedure StopInstallMusic;
+begin
+  mciSendString('stop ' + InstallMusicAlias, '', 0, 0);
+  mciSendString('close ' + InstallMusicAlias, '', 0, 0);
+end;
 
 procedure StartInstallMusic;
 var
   MusicPath: String;
+  OpenCommand: String;
 begin
+  if WizardSilent then
+    Exit;
+
   ExtractTemporaryFile('{#InstallMusicFile}');
   MusicPath := ExpandConstant('{tmp}\{#InstallMusicFile}');
-  PlaySound(MusicPath, 0, SND_FILENAME or SND_ASYNC or SND_LOOP or SND_NODEFAULT);
-end;
 
-procedure StopInstallMusic;
-begin
-  PlaySound(nil, 0, 0);
+  StopInstallMusic;
+  OpenCommand := 'open "' + MusicPath + '" type mpegvideo alias ' + InstallMusicAlias;
+  if mciSendString(OpenCommand, '', 0, 0) = 0 then
+  begin
+    mciSendString('setaudio ' + InstallMusicAlias + ' volume to 700', '', 0, 0);
+    mciSendString('play ' + InstallMusicAlias + ' repeat', '', 0, 0);
+  end;
 end;
 #endif
 
