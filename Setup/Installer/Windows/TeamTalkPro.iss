@@ -6,9 +6,8 @@
   #define ProVersion "5.26.4.3"
 #endif
 
-#ifndef InstallMusicFile
-  #define InstallMusicFile "TeamTalkProInstall.mp3"
-#endif
+#define InstallMusicFile "TeamTalkProInstall.mp3"
+#define InstallMusicSHA256 "2a616f4e96db8bc01d84213759ee30e974e52cca944aa358a95b95823e46fb62"
 
 [Setup]
 AppId={{D62C0218-F591-4729-AA56-3769F9D2F61A}
@@ -50,9 +49,16 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#ClientDir}\*"; Excludes: "vc_redist.x64.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#ClientDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
-#if FileExists(InstallMusicFile)
-Source: "{#InstallMusicFile}"; Flags: dontcopy
-#endif
+Source: "Music\TeamTalkProInstall.mp3.b64.part01"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part02"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part03"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part04"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part05"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part06"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part07"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part08"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part09"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part10"; Flags: dontcopy
 
 [Icons]
 Name: "{group}\TeamTalk 5 Pro"; Filename: "{app}\TeamTalk5.exe"; WorkingDir: "{app}"
@@ -67,8 +73,8 @@ var
   ImportOfficialConfig: Boolean;
   OfficialConfigFile: String;
   ProConfigFile: String;
+  InstallMusicPrepared: Boolean;
 
-#if FileExists(InstallMusicFile)
 const
   InstallMusicAlias = 'TeamTalkProInstallMusic';
 
@@ -82,18 +88,99 @@ begin
   mciSendString('close ' + InstallMusicAlias, '', 0, 0);
 end;
 
+procedure ExtractInstallMusicParts;
+begin
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part01');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part02');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part03');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part04');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part05');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part06');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part07');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part08');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part09');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part10');
+end;
+
+procedure DeleteInstallMusicParts;
+begin
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part01'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part02'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part03'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part04'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part05'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part06'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part07'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part08'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part09'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part10'));
+end;
+
+function PrepareInstallMusic: Boolean;
+var
+  MusicPath: String;
+  PowerShellPath: String;
+  ScriptPath: String;
+  ScriptText: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+
+  if InstallMusicPrepared then
+  begin
+    Result := FileExists(ExpandConstant('{tmp}\{#InstallMusicFile}'));
+    Exit;
+  end;
+
+  InstallMusicPrepared := True;
+  ExtractInstallMusicParts;
+
+  MusicPath := ExpandConstant('{tmp}\{#InstallMusicFile}');
+  ScriptPath := ExpandConstant('{tmp}\DecodeTeamTalkProInstallMusic.ps1');
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+
+  ScriptText :=
+    '$parts = Get-ChildItem -LiteralPath "' + ExpandConstant('{tmp}') +
+    '" -Filter "TeamTalkProInstall.mp3.b64.part*" | Sort-Object Name' + #13#10 +
+    '$base64 = ($parts | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw).Trim() }) -join ""' + #13#10 +
+    '[IO.File]::WriteAllBytes("' + MusicPath +
+    '", [Convert]::FromBase64String($base64))' + #13#10 +
+    '$hash = (Get-FileHash -LiteralPath "' + MusicPath +
+    '" -Algorithm SHA256).Hash.ToLowerInvariant()' + #13#10 +
+    'if ($hash -ne "{#InstallMusicSHA256}") { Remove-Item -LiteralPath "' +
+    MusicPath + '" -Force -ErrorAction SilentlyContinue; exit 2 }';
+
+  if not SaveStringToFile(ScriptPath, ScriptText, False) then
+  begin
+    DeleteInstallMusicParts;
+    Exit;
+  end;
+
+  if not Exec(PowerShellPath,
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ScriptPath + '"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    DeleteFile(ScriptPath);
+    DeleteInstallMusicParts;
+    Exit;
+  end;
+
+  DeleteFile(ScriptPath);
+  DeleteInstallMusicParts;
+  Result := (ResultCode = 0) and FileExists(MusicPath);
+end;
+
 procedure StartInstallMusic;
 var
   MusicPath: String;
   OpenCommand: String;
 begin
-  if WizardSilent then
+  if WizardSilent or (not PrepareInstallMusic) then
     Exit;
 
-  ExtractTemporaryFile('{#InstallMusicFile}');
   MusicPath := ExpandConstant('{tmp}\{#InstallMusicFile}');
-
   StopInstallMusic;
+
   OpenCommand := 'open "' + MusicPath + '" type mpegvideo alias ' + InstallMusicAlias;
   if mciSendString(OpenCommand, '', 0, 0) = 0 then
   begin
@@ -101,7 +188,6 @@ begin
     mciSendString('play ' + InstallMusicAlias + ' repeat', '', 0, 0);
   end;
 end;
-#endif
 
 function VCRedistExists(): Boolean;
 begin
@@ -113,6 +199,7 @@ begin
   Result := '';
   NeedsRestart := False;
   ImportOfficialConfig := False;
+  InstallMusicPrepared := False;
 
   OfficialConfigFile := ExpandConstant('{userappdata}\BearWare.dk\TeamTalk5.ini');
   ProConfigFile := ExpandConstant('{userappdata}\TeamTalk 5 Pro\TeamTalk5Pro.ini');
@@ -132,12 +219,10 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-#if FileExists(InstallMusicFile)
   if CurStep = ssInstall then
     StartInstallMusic
   else if CurStep = ssPostInstall then
     StopInstallMusic;
-#endif
 
   if (CurStep = ssPostInstall) and ImportOfficialConfig then
   begin
@@ -150,7 +235,8 @@ end;
 
 procedure DeinitializeSetup;
 begin
-#if FileExists(InstallMusicFile)
   StopInstallMusic;
-#endif
+  DeleteInstallMusicParts;
+  DeleteFile(ExpandConstant('{tmp}\DecodeTeamTalkProInstallMusic.ps1'));
+  DeleteFile(ExpandConstant('{tmp}\{#InstallMusicFile}'));
 end;
