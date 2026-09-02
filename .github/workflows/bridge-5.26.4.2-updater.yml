@@ -1,0 +1,117 @@
+name: TeamTalk Pro - 5.26.4.2 Updater Bridge
+
+on:
+  push:
+    branches:
+      - "teamtalk-pro-qt-5.26.4.3"
+    paths:
+      - ".github/release-trigger-5.26.4.3"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  bridge-old-updater:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Wait for the 5.26.4.3 release build from this commit
+        id: release_run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          run_id=""
+          for attempt in $(seq 1 90); do
+            run_id=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/publish-pro-release.yml/runs?branch=teamtalk-pro-qt-5.26.4.3&event=push&per_page=20" \
+              --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\") | .id" | head -n 1)
+
+            if [ -n "$run_id" ]; then
+              break
+            fi
+
+            sleep 10
+          done
+
+          if [ -z "$run_id" ]; then
+            echo "Nao encontrei a execucao do workflow principal para o commit ${GITHUB_SHA}." >&2
+            exit 1
+          fi
+
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "Aguardando workflow principal: $run_id"
+
+          for attempt in $(seq 1 240); do
+            status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
+            conclusion=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion // ""')
+            echo "Status: $status ${conclusion:+- $conclusion}"
+
+            if [ "$status" = "completed" ]; then
+              break
+            fi
+
+            sleep 15
+          done
+
+          status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
+          if [ "$status" != "completed" ]; then
+            echo "O workflow principal nao terminou dentro do limite de verificacao." >&2
+            exit 1
+          fi
+
+      - name: Download freshly built 5.26.4.3 release files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.release_run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          rm -rf built-release
+          mkdir -p built-release
+
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "TeamTalk-Pro-5.26.4.3-Release-Files" \
+            --dir built-release
+
+          test -f "built-release/TeamTalk-Pro-5.26.4.3-Setup-x64.exe"
+          test -f "built-release/TeamTalk-Pro-5.26.4.3-Portable-x64.zip"
+
+      - name: Publish modern assets and legacy updater alias
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          setup="built-release/TeamTalk-Pro-5.26.4.3-Setup-x64.exe"
+          portable="built-release/TeamTalk-Pro-5.26.4.3-Portable-x64.zip"
+          legacy="built-release/TeamTalk_5_Pro_5.26.4.3_Setup_x64.exe"
+
+          cp "$setup" "$legacy"
+
+          # --clobber makes this safe whether the main release step succeeded
+          # or the release already contained assets with the same names.
+          gh release upload "pro-v5.26.4.3" \
+            "$setup" \
+            "$portable" \
+            "$legacy" \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Verify compatibility asset is visible to 5.26.4.2
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+            --jq '.assets[].name' | tee release-assets.txt
+
+          grep -Fx "TeamTalk-Pro-5.26.4.3-Setup-x64.exe" release-assets.txt
+          grep -Fx "TeamTalk_5_Pro_5.26.4.3_Setup_x64.exe" release-assets.txt
