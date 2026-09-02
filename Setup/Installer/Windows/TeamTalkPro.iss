@@ -49,7 +49,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#ClientDir}\*"; Excludes: "vc_redist.x64.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#ClientDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
-Source: "Music\TeamTalkProInstall.mp3.b64.part01"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part01a"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part01b"; Flags: dontcopy
 Source: "Music\TeamTalkProInstall.mp3.b64.part02"; Flags: dontcopy
 Source: "Music\TeamTalkProInstall.mp3.b64.part03"; Flags: dontcopy
 Source: "Music\TeamTalkProInstall.mp3.b64.part04"; Flags: dontcopy
@@ -58,7 +59,8 @@ Source: "Music\TeamTalkProInstall.mp3.b64.part06"; Flags: dontcopy
 Source: "Music\TeamTalkProInstall.mp3.b64.part07"; Flags: dontcopy
 Source: "Music\TeamTalkProInstall.mp3.b64.part08"; Flags: dontcopy
 Source: "Music\TeamTalkProInstall.mp3.b64.part09"; Flags: dontcopy
-Source: "Music\TeamTalkProInstall.mp3.b64.part10"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part10a"; Flags: dontcopy
+Source: "Music\TeamTalkProInstall.mp3.b64.part10b"; Flags: dontcopy
 
 [Icons]
 Name: "{group}\TeamTalk 5 Pro"; Filename: "{app}\TeamTalk5.exe"; WorkingDir: "{app}"
@@ -90,7 +92,8 @@ end;
 
 procedure ExtractInstallMusicParts;
 begin
-  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part01');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part01a');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part01b');
   ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part02');
   ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part03');
   ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part04');
@@ -99,12 +102,14 @@ begin
   ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part07');
   ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part08');
   ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part09');
-  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part10');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part10a');
+  ExtractTemporaryFile('TeamTalkProInstall.mp3.b64.part10b');
 end;
 
 procedure DeleteInstallMusicParts;
 begin
-  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part01'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part01a'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part01b'));
   DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part02'));
   DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part03'));
   DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part04'));
@@ -113,7 +118,8 @@ begin
   DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part07'));
   DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part08'));
   DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part09'));
-  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part10'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part10a'));
+  DeleteFile(ExpandConstant('{tmp}\TeamTalkProInstall.mp3.b64.part10b'));
 end;
 
 function PrepareInstallMusic: Boolean;
