@@ -1,5 +1,5 @@
 /*
- * TeamTalk 5 Pro automatic updater for the joao465/TeamTalk5Pro fork.
+ * TeamTalk Pro automatic updater for the joao465/TeamTalk5Pro fork.
  *
  * This file is part of the Qt TeamTalk client and follows the same GPL
  * licensing terms as Client/qtTeamTalk.
@@ -27,7 +27,6 @@
 #include <QNetworkRequest>
 #include <QObject>
 #include <QProgressDialog>
-#include <QPushButton>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QString>
@@ -50,8 +49,6 @@ public:
         if (!m_parentWindow)
             return;
 
-        // Replace only the original MainWindow handler for this action. Do not
-        // disturb any Qt/menu internals that may also observe the QAction.
         if (QAction* action = m_parentWindow->findChild<QAction*>("actionCheckUpdate"))
         {
             action->disconnect(m_parentWindow);
@@ -66,7 +63,7 @@ public:
         QNetworkRequest request(QUrl(QStringLiteral("https://api.github.com/repos/joao465/TeamTalk5Pro/releases/latest")));
         request.setRawHeader("Accept", "application/vnd.github+json");
         request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
-        request.setRawHeader("User-Agent", "TeamTalk-5-Pro-Updater");
+        request.setRawHeader("User-Agent", "TeamTalk-Pro-Updater");
         request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                              QNetworkRequest::NoLessSafeRedirectPolicy);
 
@@ -83,9 +80,8 @@ public:
 private:
     static QString normalizeVersion(const QString& text)
     {
-        // Accept tags such as "pro-v5.26.3", "v5.26.3" or "5.26.3".
         QRegularExpression re(QStringLiteral("(\\d+(?:\\.\\d+)+)"));
-        QRegularExpressionMatch match = re.match(text);
+        const QRegularExpressionMatch match = re.match(text);
         return match.hasMatch() ? match.captured(1) : QString();
     }
 
@@ -96,6 +92,23 @@ private:
         if (current.isNull() || available.isNull())
             return false;
         return QVersionNumber::compare(available, current) > 0;
+    }
+
+    static int installerPriority(const QString& name)
+    {
+        if (!name.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive))
+            return 0;
+
+        // Public naming used from 5.26.4.3 onward.
+        if (name.startsWith(QStringLiteral("TeamTalk-Pro-"), Qt::CaseInsensitive) &&
+            name.contains(QStringLiteral("-Setup-"), Qt::CaseInsensitive))
+            return 2;
+
+        // Compatibility with 5.26.4.2 and older Pro updater builds.
+        if (name.contains(QStringLiteral("TeamTalk_5_Pro_"), Qt::CaseInsensitive))
+            return 1;
+
+        return 0;
     }
 
     void handleReleaseReply(QNetworkReply* reply, bool manualCheck)
@@ -155,22 +168,31 @@ private:
         QString assetName;
         QUrl assetUrl;
         QByteArray expectedSha256;
+        int bestPriority = 0;
 
         const QJsonArray assets = release.value(QStringLiteral("assets")).toArray();
         for (const QJsonValue& value : assets)
         {
             const QJsonObject asset = value.toObject();
             const QString name = asset.value(QStringLiteral("name")).toString();
-            if (name.contains(QStringLiteral("TeamTalk_5_Pro_"), Qt::CaseInsensitive) &&
-                name.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive))
-            {
-                assetName = name;
-                assetUrl = QUrl(asset.value(QStringLiteral("browser_download_url")).toString());
-                QString digest = asset.value(QStringLiteral("digest")).toString();
-                if (digest.startsWith(QStringLiteral("sha256:"), Qt::CaseInsensitive))
-                    expectedSha256 = digest.mid(7).toLatin1().toLower();
+            const int priority = installerPriority(name);
+            if (priority <= bestPriority)
+                continue;
+
+            const QUrl candidateUrl(asset.value(QStringLiteral("browser_download_url")).toString());
+            if (!candidateUrl.isValid())
+                continue;
+
+            assetName = name;
+            assetUrl = candidateUrl;
+            expectedSha256.clear();
+            QString digest = asset.value(QStringLiteral("digest")).toString();
+            if (digest.startsWith(QStringLiteral("sha256:"), Qt::CaseInsensitive))
+                expectedSha256 = digest.mid(7).toLatin1().toLower();
+
+            bestPriority = priority;
+            if (bestPriority == 2)
                 break;
-            }
         }
 
         if (!assetUrl.isValid() || assetName.isEmpty())
@@ -188,7 +210,7 @@ private:
         QMessageBox answer(m_parentWindow);
         answer.setWindowTitle(QString::fromUtf8("Atualização do TeamTalk"));
         answer.setText(QString::fromUtf8(
-            "Uma nova versão de TeamTalk está disponível!\n\n"
+            "Uma nova versão do TeamTalk Pro está disponível!\n\n"
             "Versão atual: %1\n"
             "Nova versão: %2\n\n"
             "Deseja atualizar agora?")
@@ -208,14 +230,14 @@ private:
                            const QString& availableVersion)
     {
         QNetworkRequest request(url);
-        request.setRawHeader("User-Agent", "TeamTalk-5-Pro-Updater");
+        request.setRawHeader("User-Agent", "TeamTalk-Pro-Updater");
         request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                              QNetworkRequest::NoLessSafeRedirectPolicy);
 
         auto* manager = new QNetworkAccessManager(this);
         QNetworkReply* reply = manager->get(request);
 
-        auto* progress = new QProgressDialog(QString::fromUtf8("Baixando TeamTalk %1...").arg(availableVersion),
+        auto* progress = new QProgressDialog(QString::fromUtf8("Baixando TeamTalk Pro %1...").arg(availableVersion),
                                              QString::fromUtf8("Cancelar"),
                                              0, 100,
                                              m_parentWindow);
@@ -298,8 +320,6 @@ private:
                 return;
             }
 
-            // Leave the installer responsible for closing/replacing files.
-            // A short delay lets Windows start the setup process first.
             QTimer::singleShot(500, qApp, &QCoreApplication::quit);
         });
     }
