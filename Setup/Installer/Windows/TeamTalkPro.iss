@@ -22,7 +22,7 @@ DefaultGroupName=TeamTalk 5 Pro
 UninstallDisplayName=TeamTalk 5 (pro {#ProVersion})
 UninstallDisplayIcon={app}\TeamTalk5.exe
 AllowNoIcons=yes
-OutputBaseFilename=TeamTalk_5_Pro_{#ProVersion}_Setup_x64
+OutputBaseFilename=TeamTalk-Pro-{#ProVersion}-Setup-x64
 SetupIconFile=..\..\..\Client\qtTeamTalk\images\teamtalk.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -75,7 +75,7 @@ const
   SND_LOOP = $0008;
   SND_FILENAME = $00020000;
 
-function PlaySound(pszSound: String; hmod: Integer; fdwSound: Cardinal): Boolean;
+function PlaySound(pszSound: PChar; hmod: Integer; fdwSound: Cardinal): Boolean;
   external 'PlaySoundW@winmm.dll stdcall';
 
 procedure StartInstallMusic;
@@ -89,7 +89,7 @@ end;
 
 procedure StopInstallMusic;
 begin
-  PlaySound('', 0, 0);
+  PlaySound(nil, 0, 0);
 end;
 #endif
 
