@@ -195,6 +195,12 @@ begin
   end;
 end;
 
+procedure InitializeWizard;
+begin
+  InstallMusicPrepared := False;
+  StartInstallMusic;
+end;
+
 function VCRedistExists(): Boolean;
 begin
   Result := FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe'));
@@ -205,7 +211,6 @@ begin
   Result := '';
   NeedsRestart := False;
   ImportOfficialConfig := False;
-  InstallMusicPrepared := False;
 
   OfficialConfigFile := ExpandConstant('{userappdata}\BearWare.dk\TeamTalk5.ini');
   ProConfigFile := ExpandConstant('{userappdata}\TeamTalk 5 Pro\TeamTalk5Pro.ini');
@@ -225,9 +230,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssInstall then
-    StartInstallMusic
-  else if CurStep = ssPostInstall then
+  if CurStep = ssPostInstall then
     StopInstallMusic;
 
   if (CurStep = ssPostInstall) and ImportOfficialConfig then
